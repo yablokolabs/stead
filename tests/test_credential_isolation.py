@@ -26,7 +26,8 @@ ANTHROPIC_API_KEY={key}
 
 
 def launch(tmp_path, env_body=None, ambient=None, mode=0o600,
-           profile_model="claude-sonnet-4-6", profile_provider="anthropic"):
+           profile_model="claude-sonnet-4-6", profile_provider="anthropic",
+           config_style="nested"):
     """Run the launcher against a scratch demo home AND a scratch profile.
 
     The launcher derives the profile path from $HOME, so pointing HOME at a
@@ -44,9 +45,16 @@ def launch(tmp_path, env_body=None, ambient=None, mode=0o600,
     fake_home = tmp_path / "home"
     profile = fake_home / ".hermes" / "profiles" / "stead-kerstin-demo"
     profile.mkdir(parents=True, exist_ok=True)
-    (profile / "config.yaml").write_text(
-        f"model: {profile_model}\nprovider: {profile_provider}\n"
-    )
+    # Hermes writes the pin as a nested block. An earlier version of this
+    # harness only ever wrote the flat form, so a launcher that could not read
+    # the nested one passed every test and still failed closed in production.
+    if config_style == "nested":
+        config = (f"model:\n  default: {profile_model}\n"
+                  f"  provider: {profile_provider}\n"
+                  "onboarding:\n  seen:\n    profile_build_offered: true\n")
+    else:
+        config = f"model: {profile_model}\nprovider: {profile_provider}\n"
+    (profile / "config.yaml").write_text(config)
 
     catalogue = tmp_path / "models.py"
     catalogue.write_text(
@@ -221,3 +229,27 @@ def test_no_credential_value_is_ever_printed_by_the_launcher():
     for var in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "STEAD_TELEGRAM_BOT_TOKEN"):
         assert f"echo ${var}" not in text
         assert f'echo "${{{var}}}"' not in text
+
+
+# 8 — the pin is read from the layout Hermes actually writes -------------------
+
+@pytest.mark.parametrize("config_style", ["nested", "flat"])
+def test_a_matching_pin_is_accepted_in_either_config_layout(tmp_path, config_style):
+    """A correctly pinned profile must start, however the pin is written."""
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC)
+
+    result = launch(tmp_path, env_body=body, config_style=config_style)
+
+    assert result.returncode == 0, combined(result)
+    assert "does not match" not in combined(result)
+
+
+@pytest.mark.parametrize("config_style", ["nested", "flat"])
+def test_a_mismatched_pin_still_fails_closed_in_either_layout(tmp_path, config_style):
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC)
+
+    result = launch(tmp_path, env_body=body, config_style=config_style,
+                    profile_model="gemini-2.5-flash", profile_provider="gemini")
+
+    assert result.returncode == 78
+    assert "does not match" in combined(result)

@@ -86,8 +86,23 @@ fi
 # back to its built-in default (observed: claude-fable-5) when the profile has
 # no model key, so the pinned value is silently ignored. Reconcile the profile
 # config with the env file on every start.
-CONFIGURED_MODEL="$(sed -nE 's/^model:[[:space:]]*//p' "${PROFILE_HOME}/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"' ')"
-CONFIGURED_PROVIDER="$(sed -nE 's/^provider:[[:space:]]*//p' "${PROFILE_HOME}/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"' ')"
+# Hermes writes the pin as a nested block:
+#   model:
+#     default: <name>
+#     provider: <name>
+# Reading it with '^model:' yields an empty string, and an empty string compares
+# unequal to the env file, so the launcher fails closed on a profile that is in
+# fact correctly configured. Read the block, and fall back to the older flat
+# `model: <name>` / `provider: <name>` form.
+read_model_cfg() {  # $1 = key inside the block, $2 = flat key at column 0
+    local cfg nested flat
+    cfg="${PROFILE_HOME}/config.yaml"
+    nested="$(sed -nE "/^model:[[:space:]]*\$/,/^[^[:space:]#]/{ s/^[[:space:]]+$1:[[:space:]]*//p }" "${cfg}" 2>/dev/null | head -1)"
+    flat="$(sed -nE "s/^$2:[[:space:]]+//p" "${cfg}" 2>/dev/null | head -1)"
+    printf '%s' "${nested:-${flat}}" | tr -d '"'"'"' '
+}
+CONFIGURED_MODEL="$(read_model_cfg default model)"
+CONFIGURED_PROVIDER="$(read_model_cfg provider provider)"
 
 if [[ "${CONFIGURED_MODEL}" != "${MODEL}" || "${CONFIGURED_PROVIDER}" != "${PROVIDER}" ]]; then
     die "profile config (model='${CONFIGURED_MODEL}' provider='${CONFIGURED_PROVIDER}') does not match ${ENV_FILE} (model='${MODEL}' provider='${PROVIDER}'). Reconcile with: stead-kerstin-demo config set model ${MODEL} && stead-kerstin-demo config set provider ${PROVIDER}"
