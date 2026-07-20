@@ -26,6 +26,11 @@ in this Hermes version will fail here. Use one it lists.
 **Wrong env file** — secrets go in `~/.stead-demo/.env`, not the repo, not the
 profile directory, not the unit.
 
+**Gemini HTTP 429 / free-tier quota exceeded** — if Stead is still pinned to
+`gemini-3.5-flash`, switch both `STEAD_MODEL_NAME` in `~/.stead-demo/.env` and
+the Hermes profile model to `gemini-2.5-flash`. The launcher fails closed if
+those two disagree.
+
 ## The bot does not answer
 
 1. Is the service active? `systemctl --user is-active hermes-gateway-stead-kerstin-demo`

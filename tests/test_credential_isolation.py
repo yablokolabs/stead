@@ -48,11 +48,18 @@ def launch(tmp_path, env_body=None, ambient=None, mode=0o600,
         f"model: {profile_model}\nprovider: {profile_provider}\n"
     )
 
+    catalogue = tmp_path / "models.py"
+    catalogue.write_text(
+        '"claude-sonnet-4-6"\n'
+        '"gemini-2.5-flash"\n'
+    )
+
     env = {
         "PATH": "/usr/bin:/bin",
         "HOME": str(fake_home),
         "STEAD_DEMO_HOME": str(demo),
         "EXEC_GUARD": "1",
+        "HERMES_MODELS_CATALOGUE": str(catalogue),
     }
     env.update(ambient or {})
     return subprocess.run(["/bin/bash", str(LAUNCHER)], env=env,
@@ -163,7 +170,7 @@ def test_profile_config_disagreeing_with_the_env_file_fails_closed(tmp_path):
     body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC)   # asks for claude-sonnet-4-6
 
     result = launch(tmp_path, env_body=body,
-                    profile_model="gemini-3.5-flash", profile_provider="gemini")
+                    profile_model="gemini-2.5-flash", profile_provider="gemini")
 
     assert result.returncode == 78
     assert "does not match" in combined(result)
@@ -174,12 +181,12 @@ def test_a_gemini_configuration_is_accepted(tmp_path):
         "STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE\n"
         "STEAD_ALLOWED_TELEGRAM_IDS=111222333\n"
         "STEAD_MODEL_PROVIDER=gemini\n"
-        "STEAD_MODEL_NAME=gemini-3.5-flash\n"
+        "STEAD_MODEL_NAME=gemini-2.5-flash\n"
         f"GEMINI_API_KEY={FAKE_GEMINI}\n"
     )
 
     result = launch(tmp_path, env_body=body,
-                    profile_model="gemini-3.5-flash", profile_provider="gemini")
+                    profile_model="gemini-2.5-flash", profile_provider="gemini")
 
     out = combined(result)
     assert "FATAL" not in out

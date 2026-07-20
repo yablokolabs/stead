@@ -74,7 +74,7 @@ if [[ "${PROVIDER}" == "anthropic" && "${ANTHROPIC_API_KEY}" != sk-ant-* ]]; the
 fi
 
 # --- 5. Validate the model against the installed catalogue ------------------
-CATALOGUE="/home/azureuser/.hermes/hermes-agent/hermes_cli/models.py"
+CATALOGUE="${HERMES_MODELS_CATALOGUE:-/home/azureuser/.hermes/hermes-agent/hermes_cli/models.py}"
 if [[ -f "${CATALOGUE}" ]] && ! grep -qF "\"${MODEL}\"" "${CATALOGUE}"; then
     die "STEAD_MODEL_NAME='${MODEL}' is not in this Hermes build's catalogue"
 fi

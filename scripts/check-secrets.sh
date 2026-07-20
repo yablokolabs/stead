@@ -61,7 +61,7 @@ fi
 MODEL="$(grep -E '^[[:space:]]*(export[[:space:]]+)?STEAD_MODEL_NAME=' "${ENV_FILE}" 2>/dev/null \
          | tail -1 | cut -d= -f2- | tr -d '"'"'"' ' || true)"
 if [[ -n "${MODEL}" ]]; then
-    CATALOGUE="${HOME}/.hermes/hermes-agent/hermes_cli/models.py"
+    CATALOGUE="${HERMES_MODELS_CATALOGUE:-${HOME}/.hermes/hermes-agent/hermes_cli/models.py}"
     if [[ -f "${CATALOGUE}" ]] && grep -qF "\"${MODEL}\"" "${CATALOGUE}"; then
         printf '  %-32s VALID (in Hermes catalogue)\n' "model:${MODEL}"
     else
