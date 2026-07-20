@@ -47,7 +47,12 @@ check "no fallback provider configured"     "stead-kerstin-demo fallback list | 
 
 echo; echo "== Credential enforcement =="
 check "launcher exists and is executable"   "[[ -x ${REPO}/scripts/stead-launch.sh ]]"
-check "unit launches via the launcher"      "grep -q 'stead-launch.sh' ${HOME}/.config/systemd/user/${UNIT}"
+# Hermes rewrites its own unit on gateway startup (refresh_systemd_unit_if_needed),
+# so the launcher is enforced by a drop-in, which that self-heal does not touch.
+check "launcher drop-in exists" \
+      "[[ -f ${HOME}/.config/systemd/user/${UNIT}.d/override.conf ]]"
+check "effective ExecStart is the launcher" \
+      "systemctl --user show -p ExecStart --value ${UNIT} | grep -q 'stead-launch.sh'"
 check "unit will not restart a misconfig"   "grep -q 'RestartPreventExitStatus=78' ${HOME}/.config/systemd/user/${UNIT}"
 check "launcher scrubs ambient keys"        "grep -q 'CLAUDE_CODE_OAUTH_TOKEN' ${REPO}/scripts/stead-launch.sh"
 check "launcher never reads Claude Code creds" \

@@ -108,3 +108,29 @@ rm -rf ~/.stead-demo
 ```
 
 None of that touches Polaris.
+
+## The launcher was bypassed after a restart
+
+Hermes rewrites its own systemd unit on gateway startup
+(`refresh_systemd_unit_if_needed`, `hermes_cli/gateway.py:2698`). Any `ExecStart`
+edit made directly to `hermes-gateway-stead-kerstin-demo.service` is reverted
+within a second of the service starting.
+
+The launcher is therefore enforced by a drop-in, which the self-heal does not
+touch:
+
+```
+~/.config/systemd/user/hermes-gateway-stead-kerstin-demo.service.d/override.conf
+```
+
+A copy is version-controlled at `systemd/override.conf`. If it is lost, the
+gateway silently stops scrubbing ambient credentials. Confirm with:
+
+```bash
+systemctl --user show -p ExecStart --value \
+  hermes-gateway-stead-kerstin-demo.service | grep stead-launch.sh
+journalctl --user -u hermes-gateway-stead-kerstin-demo -n 20 | grep 'stead-launch:'
+```
+
+Expect a `stead-launch:` line on every start. Its absence means the drop-in is
+missing — restore it and `systemctl --user daemon-reload`.
