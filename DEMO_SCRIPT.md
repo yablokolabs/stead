@@ -121,11 +121,17 @@ all.
 ## Limitations to tell Kerstin
 
 - Early preview. It will get things wrong.
-- It knows only what she tells it in this chat. No email, calendar, banking or
-  shops are connected.
-- It cannot do anything in the outside world — it can plan, remind and track.
-  If it says something was paid or submitted, that is a bug; it only knows what
-  she reported.
+- It knows what she tells it in this chat, plus what it looks up. No email,
+  calendar, banking or shops are connected.
+- It can run a web search and read the results. It cannot open a page she
+  links. Anything it finds is a suggestion until she confirms it, and only then
+  is it remembered — tagged with where it came from.
+- It cannot do anything else in the outside world — it can plan, remind and
+  track. If it says something was paid or submitted, that is a bug; it only
+  knows what she reported.
 - Reminders arrive in this Telegram chat only.
 - At most two proactive messages a day unless she asks for more.
-- Her data lives in a local database on one VM; `reset.sh` erases it.
+- Her household data lives in a local database on one VM; `reset.sh` erases it.
+  Its searches go out through a search service, the same as anyone's — it is
+  instructed never to put her personal details in a query. Do not claim her
+  searches stay on the machine; they do not.

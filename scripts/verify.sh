@@ -30,12 +30,29 @@ done
 check "sticky default not switched"         "[[ ! -f ${HOME}/.hermes/active_profile ]]"
 
 echo; echo "== Forbidden tools are absent =="
-for TOOLSET in terminal file code_execution browser computer_use skills delegation cronjob; do
+for TOOLSET in terminal file code_execution browser computer_use skills delegation cronjob x_search; do
     for PLAT in cli telegram; do
         check "${TOOLSET} disabled (${PLAT})" \
               "stead-kerstin-demo tools list --platform ${PLAT} | grep -q '✗ disabled  ${TOOLSET} '"
     done
 done
+
+echo; echo "== Web search =="
+# Web search is optional. With SEARXNG_URL unset, Hermes drops web_search and
+# web_extract from the registry and there is nothing to assert — that is a
+# valid posture, not a failure. Only check the wiring once it is switched on.
+if grep -qE '^[[:space:]]*(export )?SEARXNG_URL=[^[:space:]]' "${DEMO_HOME}/.env" 2>/dev/null; then
+    check "web toolset enabled (cli)" \
+          "stead-kerstin-demo tools list --platform cli | grep -q 'web '"
+    check "web backend pinned to searxng" \
+          "grep -qE '^[[:space:]]*(search_)?backend:[[:space:]]*.?searxng' ${PROFILE_HOME}/config.yaml"
+    check "SEARXNG_URL points at loopback" \
+          "grep -qE '^[[:space:]]*(export )?SEARXNG_URL=https?://(127\.0\.0\.1|localhost)(:[0-9]+)?/?\$' ${DEMO_HOME}/.env"
+    check "searxng container is not published on a public interface" \
+          "! docker ps --filter name=stead-searxng --format '{{.Ports}}' 2>/dev/null | grep -qE '(^|[^0-9.])0\.0\.0\.0:'"
+else
+    echo "  SKIP  web search is off (no SEARXNG_URL) — Stead has no web tools"
+fi
 
 echo; echo "== Scheduling goes only through the trusted path =="
 check "no raw cron tool on the agent surface" \

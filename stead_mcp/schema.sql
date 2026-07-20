@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS facts (
     scope       TEXT NOT NULL DEFAULT 'general',
     value       TEXT NOT NULL,
     provenance  TEXT NOT NULL,
+    -- 'stated' (Kerstin said it) or 'web' (searched, and approved by her).
+    -- Unlike provenance, which the model writes freely, this is set by which
+    -- path stored the row.
+    source      TEXT NOT NULL DEFAULT 'stated',
+    source_url  TEXT,
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
     UNIQUE (household, name, scope)

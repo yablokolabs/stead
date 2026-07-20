@@ -37,13 +37,14 @@ section in `SECURITY.md`.
 ```
 stead_mcp/          SQLite-backed household state, exposed over MCP
   store.py          the store — household bound at construction
-  server.py         the 21 MCP tools
+  server.py         the 22 MCP tools
   scheduler.py      the only component permitted to touch cron
   schema.sql        idempotent schema
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
-scripts/            setup, verify, check-secrets, reset
-tests/              79 tests — store, MCP, scheduler gate, credential isolation
+scripts/            setup, verify, check-secrets, reset, setup-searxng
+tests/              97 tests — store, MCP, scheduler gate, credential
+                    isolation, fact provenance
 ```
 
 State lives in `$STEAD_DEMO_HOME` (default `~/.stead-demo`), mode 700, outside
@@ -53,10 +54,16 @@ git. The database is mode 600.
 
 ```bash
 ./scripts/setup.sh            # idempotent; installs identity, skill, schema
+./scripts/setup-searxng.sh    # optional; writes SearXNG config, starts nothing
 $EDITOR ~/.stead-demo/.env    # fill in — see .env.example
 ./scripts/check-secrets.sh    # reports PRESENT/MISSING, never values
-./scripts/verify.sh           # 57 offline checks
+./scripts/verify.sh           # 59 offline checks (63 with web search on)
 ```
+
+Web search is optional. Without `SEARXNG_URL`, Hermes drops `web_search` and
+`web_extract` from the registry and Stead has no search capability at all — it
+will say so accurately if asked. See the **Web search** section of
+`SECURITY.md` before enabling it.
 
 The gateway must not be started until `check-secrets.sh` reports
 `SECRET GATE: READY`.

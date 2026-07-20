@@ -36,6 +36,15 @@ for VAR in "${REQUIRED[@]}"; do
     fi
 done
 
+# Web search is optional. Absent means Stead has no web tools, which is a valid
+# configuration — so this reports without setting MISSING.
+if present SEARXNG_URL; then
+    printf '  %-32s PRESENT\n' "SEARXNG_URL (optional)"
+else
+    printf '  %-32s absent — web search off\n' "SEARXNG_URL (optional)"
+fi
+echo
+
 # The provider credential depends on which provider was chosen. Read only the
 # provider name — it is not a secret.
 PROVIDER="$(grep -E '^[[:space:]]*(export[[:space:]]+)?STEAD_MODEL_PROVIDER=' "${ENV_FILE}" 2>/dev/null \

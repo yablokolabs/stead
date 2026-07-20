@@ -27,7 +27,7 @@ agent's availability at the mercy of this demo.
 | In git | never — `.gitignore` excludes it, verification asserts it |
 | In the systemd unit | never — the unit sets `HERMES_HOME` and nothing else |
 | In SQLite | never — no table stores a token, key or credential |
-| In logs | never — the MCP server logs tool names and outcomes only |
+| In logs | never — the MCP server logs tool names and outcomes only, and the gateway runs at `WARNING`, below the level at which tool arguments are emitted |
 | In this chat | never — `check-secrets.sh` reports PRESENT/MISSING only |
 
 The verification suite greps the unit for `TOKEN|API_KEY|SECRET|PASSWORD` and
@@ -35,8 +35,8 @@ fails if any appears.
 
 ## Tool restriction
 
-Enabled for `stead-kerstin-demo`: `memory`, `session_search`, `clarify`, plus
-the 21 Stead MCP tools.
+Enabled for `stead-kerstin-demo` on both `cli` and `telegram`: `clarify`,
+`kanban`, `memory`, `session_search`, `web`, plus the 22 Stead MCP tools.
 
 `cronjob` is **disabled**. Hermes' built-in scheduler tool lets the caller choose
 both the delivery target and the job prompt, which routes around the proposal
@@ -46,7 +46,7 @@ approval row in SQLite. It is replaced by the single narrow tool
 refuses anything SQLite does not report as approved.
 
 Disabled on both `cli` and `telegram`: `terminal`, `file`, `code_execution`,
-`browser`, `computer_use`, `skills`, `delegation`, `todo`, `web`, `vision`,
+`browser`, `computer_use`, `skills`, `delegation`, `todo`, `vision`,
 `image_gen`, `tts`, `video`, `video_gen`, `x_search`, `context_engine`,
 `homeassistant`, `spotify`, `yuanbao`.
 
@@ -54,8 +54,59 @@ Disabled on both `cli` and `telegram`: `terminal`, `file`, `code_execution`,
 `setup.sh`, so the agent never needs — and never has — the ability to install or
 author skills at runtime.
 
+`web` was previously in the disabled list. That is now reversed deliberately —
+see **Web search**. `x_search` stays disabled: it needs an xAI credential this
+demo does not own, and it would add a second egress vendor for no benefit.
+
 Hermes dangerous-command approvals stay enabled. YOLO mode is not used.
 Verification checks all of this on every run.
+
+## Web search
+
+Stead can search the web. This is the only outbound path other than the model
+API, and it is a reversal of the original no-egress posture.
+
+**Backend.** A SearXNG instance on this VM, published on `127.0.0.1` only,
+selected by `web.backend: searxng` and `SEARXNG_URL` in
+`$STEAD_DEMO_HOME/.env`. There is no search-vendor account, no API key, and no
+billed subscription tied to Kerstin.
+
+**SearXNG is a metasearch proxy, not a local index.** It forwards each query to
+upstream engines and aggregates their results. Query text does leave this
+machine. What is avoided is a vendor relationship that could link a query to
+Kerstin's identity or to a paid account. Anyone who would otherwise be told
+"her data stays on the VM" must be told this instead.
+
+**Extraction is unavailable.** SearXNG reports `supports_extract() == False`
+and no other provider is configured, so `web_extract` fails closed. Stead can
+read search results; it cannot fetch an arbitrary page.
+
+**Availability is gated at the registry.** `check_web_api_key()` in Hermes
+drops both web tools whenever no backend resolves. With `SEARXNG_URL` unset,
+Stead has no web tools at all — that is the state this repository ships in, and
+the agent correctly reports having no search capability.
+
+**Searched claims are not household facts.** See **Fact provenance**.
+
+## Fact provenance
+
+`facts.source` is `'stated'` or `'web'`. Unlike `provenance`, which is free
+text the model writes, `source` is set by the path that stored the row:
+`confirm_fact` always writes `'stated'`, and only an approved `propose_fact`
+writes `'web'` together with the originating URL.
+
+- A proposed fact stores nothing until `approve_proposal` is called.
+- Approval is refused if the fact was written or removed after the proposal was
+  made. Staleness is detected against the audit log rather than by comparing
+  values, so a change she later undid still invalidates the approval.
+- Corroboration does not relabel. If a search agrees with a value she stated,
+  the row keeps `source = 'stated'` and her original provenance string rather
+  than being re-attributed to the web.
+
+**Not enforced in code.** Nothing prevents the model calling `confirm_fact`
+directly with something it read on the web. The skill forbids it; the schema
+cannot detect it. This is the same trust level as the existing
+pattern-is-a-hypothesis rule, and it is stated here rather than implied.
 
 ## Scheduling
 
@@ -92,11 +143,15 @@ cron jobs, and it is not exposed as a general capability.
 
 ## What Stead cannot do
 
-It is not connected to email, calendar, banking, shops or any external service.
-It cannot make a payment, submit a form, or send a message anywhere except this
-Telegram chat. Approving a reminder schedules a message; it does not perform an
-action in the world. The identity file and the skill both state this, and
-`record_outcome` requires stated evidence rather than an assumption.
+It is not connected to email, calendar, banking or shops. It cannot make a
+payment, submit a form, or send a message anywhere except this Telegram chat.
+Approving a reminder schedules a message; it does not perform an action in the
+world.
+
+It **can** search the web and read the results. It cannot fetch an arbitrary
+page, and it cannot store what it finds without Kerstin approving it first. The
+identity file and the skill both state this, and `record_outcome` requires
+stated evidence rather than an assumption.
 
 ## Access
 
@@ -110,9 +165,16 @@ before Kerstin is invited — see `HANDOFF.md`.
 ## Data
 
 The database holds household facts, members, events, goals, tasks, reminders,
-outcomes and an audit log. It does not hold raw transcripts. Delete it with
-`scripts/reset.sh`, which demands the exact file path plus typed confirmation
-and refuses directories.
+outcomes and an audit log. Each fact carries the source that produced it. It
+does not hold raw transcripts, and it does not store search results — only a
+fact Kerstin approved, with its URL. Delete it with `scripts/reset.sh`, which
+demands the exact file path plus typed confirmation and refuses directories.
+
+`reset.sh` erases the database and nothing else. Search queries are not written
+to the database, and at the gateway's normal verbosity they are not written to
+any log either — which matters, because journald has no per-unit deletion and a
+query recorded there could not be erased without destroying Polaris's logs too.
+That is why the control is "never log the query", not "delete it afterwards".
 
 ## Reporting
 
@@ -144,3 +206,39 @@ Mitigated within the Stead boundary:
 it would find Polaris's token. Verification asserts the provider is pinned and
 no fallback exists. This is a Hermes-level behaviour, not something this project
 can fully close.
+
+## Known residual risk: web provider credentials outside HERMES_HOME
+
+`agent/web_search_provider.get_provider_env()` resolves a provider credential
+from `os.environ` first and then from `~/.hermes/.env` — Polaris's environment
+file, outside Stead's `HERMES_HOME`. It is the same shape of hole as the codex
+credential above, applied to search backends.
+
+`~/.hermes/.env` holds no search-provider key today; this was checked by name,
+without reading any value. But nothing stops one being added later, and if a
+`FIRECRAWL_API_KEY` or similar appeared there, `check_web_api_key()` would light
+up that backend inside the Stead profile without any change to this repository.
+
+Mitigated within the Stead boundary:
+
+- `web.backend` is pinned to `searxng`, which is selected explicitly rather than
+  by the legacy preference order.
+- `stead-launch.sh` scrubs `SEARXNG_URL` from the ambient environment before
+  sourcing `$STEAD_DEMO_HOME/.env`, so the endpoint cannot be injected by
+  whatever started the service.
+
+**Residual:** a credential placed in Polaris's env file could still be resolved
+if the pin were removed. Verification asserts the pin.
+
+## Known residual risk: query logging at raised verbosity
+
+`tools/web_tools.py` logs the full search query at `INFO`, and the SearXNG
+provider issues a `GET` with the query in the URL, which `httpx` also logs at
+`INFO`. The gateway runs at verbosity 0, which `gateway/run.py` maps to
+`WARNING`, so neither line is emitted and no query has ever reached the journal.
+
+**Residual:** starting the gateway with `-v` raises the root logger to `INFO`
+and every household query begins landing in journald, where it cannot be
+selectively erased. Do not run the Stead gateway verbosely against real
+household data. This is Hermes-level behaviour; this project can pin the
+verbosity it starts with, not the level a future operator chooses.
