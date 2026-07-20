@@ -30,22 +30,44 @@ done
 check "sticky default not switched"         "[[ ! -f ${HOME}/.hermes/active_profile ]]"
 
 echo; echo "== Forbidden tools are absent =="
-for TOOLSET in terminal file code_execution browser computer_use skills delegation; do
+for TOOLSET in terminal file code_execution browser computer_use skills delegation cronjob; do
     for PLAT in cli telegram; do
         check "${TOOLSET} disabled (${PLAT})" \
               "stead-kerstin-demo tools list --platform ${PLAT} | grep -q '✗ disabled  ${TOOLSET} '"
     done
 done
 
+echo; echo "== Scheduling goes only through the trusted path =="
+check "no raw cron tool on the agent surface" \
+      "! stead-kerstin-demo tools list --platform telegram | grep -q '✓ enabled  cronjob'"
+check "trusted scheduler exists"            "[[ -f ${REPO}/stead_mcp/scheduler.py ]]"
+check "scheduler pins the Stead profile"    "grep -q 'PROFILE = \"stead-kerstin-demo\"' ${REPO}/stead_mcp/scheduler.py"
+check "scheduler uses argv, never a shell"  "grep -q 'shell=False' ${REPO}/stead_mcp/scheduler.py"
+check "no fallback provider configured"     "stead-kerstin-demo fallback list | grep -q 'No fallback providers'"
+
+echo; echo "== Credential enforcement =="
+check "launcher exists and is executable"   "[[ -x ${REPO}/scripts/stead-launch.sh ]]"
+check "unit launches via the launcher"      "grep -q 'stead-launch.sh' ${HOME}/.config/systemd/user/${UNIT}"
+check "unit will not restart a misconfig"   "grep -q 'RestartPreventExitStatus=78' ${HOME}/.config/systemd/user/${UNIT}"
+check "launcher scrubs ambient keys"        "grep -q 'CLAUDE_CODE_OAUTH_TOKEN' ${REPO}/scripts/stead-launch.sh"
+check "launcher never reads Claude Code creds" \
+      "! grep -q 'credentials.json' ${REPO}/scripts/stead-launch.sh"
+check "inherited copilot credential suppressed" \
+      "! stead-kerstin-demo auth list | grep -q '^copilot'"
+check "inherited qwen credential suppressed" \
+      "! stead-kerstin-demo auth list | grep -q '^qwen-oauth'"
+
 echo; echo "== Required tools are present =="
-for TOOLSET in memory cronjob clarify; do
+for TOOLSET in memory clarify; do
     check "${TOOLSET} enabled (telegram)" \
           "stead-kerstin-demo tools list --platform telegram | grep -q '✓ enabled  ${TOOLSET} '"
 done
 
 echo; echo "== Service definition =="
 check "unit exists"                         "[[ -f ${HOME}/.config/systemd/user/${UNIT} ]]"
-check "unit names the Stead profile"        "grep -q -- '--profile ${PROFILE}' ${HOME}/.config/systemd/user/${UNIT}"
+check "unit is bound to the Stead profile"  "grep -q '${PROFILE}' ${HOME}/.config/systemd/user/${UNIT}"
+check "launcher pins the Stead profile"     "grep -q -- '--profile \"\${PROFILE}\"' ${REPO}/scripts/stead-launch.sh"
+check "launcher hardcodes the profile name" "grep -q 'PROFILE=\"${PROFILE}\"' ${REPO}/scripts/stead-launch.sh"
 check "unit restarts on failure"            "grep -q 'Restart=always' ${HOME}/.config/systemd/user/${UNIT}"
 check "unit contains no secret material" \
       "! grep -qEi '(TOKEN|API_KEY|SECRET|PASSWORD)=' ${HOME}/.config/systemd/user/${UNIT}"
@@ -61,7 +83,8 @@ cd "${REPO}"
 check "no .env tracked"                     "! git ls-files --error-unmatch .env"
 check "no database tracked"                 "[[ -z \$(git ls-files '*.sqlite*') ]]"
 check "no venv tracked"                     "[[ -z \$(git ls-files '.venv*') ]]"
-check "no credential file referenced"       "! git grep -qI 'credentials.json' -- . ':!scripts/verify.sh'"
+check "production code never names personal creds" \
+      "! git grep -qI 'credentials.json' -- stead_mcp scripts ':!scripts/verify.sh'"
 
 echo; echo "== Test suite =="
 if "${REPO}/.venv/bin/python" -m pytest "${REPO}/tests" -q >/tmp/stead_pytest.log 2>&1; then

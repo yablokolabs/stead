@@ -62,11 +62,24 @@ class SteadStore:
     def migrate(self) -> None:
         """Create the schema. Safe to run repeatedly; preserves existing rows."""
         self._db.executescript(SCHEMA_PATH.read_text())
+        self._add_missing_columns()
         self._db.commit()
         try:
             self.db_path.chmod(0o600)
         except OSError:
             pass
+
+    def _add_missing_columns(self) -> None:
+        """Bring an older database up to the current shape without losing rows.
+
+        CREATE TABLE IF NOT EXISTS silently skips a table that already exists,
+        so a column added after first release needs an explicit ALTER.
+        """
+        wanted = {("reminders", "cron_job_id"): "TEXT"}
+        for (table, column), coltype in wanted.items():
+            existing = {r["name"] for r in self._rows(f"PRAGMA table_info({table})")}
+            if column not in existing:
+                self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
 
     def close(self) -> None:
         self._db.close()
@@ -285,6 +298,50 @@ class SteadStore:
             "FROM reminders r JOIN proposals p ON p.id = r.proposal_id "
             "WHERE r.household = ? AND p.status = 'approved' ORDER BY r.fire_at",
             (self.household_id,),
+        )
+
+    # -- scheduling state -----------------------------------------------------
+
+    def reminder_for_proposal_ref(self, ref: str) -> Optional[Dict[str, Any]]:
+        """The reminder created by an approved proposal, with its task status."""
+        return self._row(
+            "SELECT r.id, r.task_id, r.fire_at, r.message, r.cron_job_id, "
+            "       r.delivered_at, p.status AS proposal_status, "
+            "       t.status AS task_status "
+            "FROM proposals p "
+            "LEFT JOIN reminders r ON r.proposal_id = p.id "
+            "LEFT JOIN tasks t ON t.id = r.task_id "
+            "WHERE p.household = ? AND p.ref = ?",
+            (self.household_id, ref),
+        )
+
+    def proposal_status(self, ref: str) -> Optional[str]:
+        row = self._row(
+            "SELECT status FROM proposals WHERE household = ? AND ref = ?",
+            (self.household_id, ref),
+        )
+        return row["status"] if row else None
+
+    def attach_cron_job(self, reminder_id: int, cron_job_id: str) -> None:
+        """Record the Hermes job id. Presence of this is the idempotency key."""
+        self._write(
+            "UPDATE reminders SET cron_job_id = ? WHERE household = ? AND id = ?",
+            (cron_job_id, self.household_id, reminder_id),
+        )
+
+    def clear_cron_job(self, reminder_id: int) -> None:
+        self._write(
+            "UPDATE reminders SET cron_job_id = NULL WHERE household = ? AND id = ?",
+            (self.household_id, reminder_id),
+        )
+
+    def scheduled_jobs_for_task(self, task_id: int) -> List[Dict[str, Any]]:
+        """Live cron jobs attached to a task — used to cancel on resolution."""
+        return self._rows(
+            "SELECT id, cron_job_id FROM reminders "
+            "WHERE household = ? AND task_id = ? AND cron_job_id IS NOT NULL "
+            "AND delivered_at IS NULL",
+            (self.household_id, task_id),
         )
 
     # -- delivery -------------------------------------------------------------

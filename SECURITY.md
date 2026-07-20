@@ -87,3 +87,28 @@ and refuses directories.
 Verification never claims a live capability it has not exercised. Telegram
 delivery, unauthorised-user rejection and live cron delivery are reported as
 blocked until they have actually run against the dedicated bot.
+
+## Known residual risk: shared codex credential store
+
+`hermes auth remove openai-codex` records a suppression in the Stead profile's
+`auth.json`, and the profile's own credential pool is empty. Despite that, a
+runtime `load_pool("openai-codex")` inside the Stead profile still resolves a
+live OAuth access token that is **not** stored in the profile — so the read
+reaches a credential store outside `HERMES_HOME`.
+
+That token belongs to Polaris's provider. Closing it at source would mean
+modifying `~/.hermes`, which is out of scope.
+
+Mitigated within the Stead boundary:
+
+- `STEAD_MODEL_PROVIDER` is pinned to `anthropic` or `gemini`; `openai-codex`
+  is never selected.
+- No fallback providers are configured, so nothing can fall back to it.
+- The launcher fails closed (exit 78, no restart) if the pinned provider's
+  application key is absent, rather than silently reaching for another
+  credential.
+
+**Residual:** if the Stead profile were ever reconfigured to use `openai-codex`,
+it would find Polaris's token. Verification asserts the provider is pinned and
+no fallback exists. This is a Hermes-level behaviour, not something this project
+can fully close.

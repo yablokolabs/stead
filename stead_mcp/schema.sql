@@ -73,7 +73,10 @@ CREATE TABLE IF NOT EXISTS reminders (
     fire_at      TEXT NOT NULL,
     message      TEXT NOT NULL,
     delivered_at TEXT,
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    -- Hermes cron job id, set once the trusted scheduler has placed the job.
+    -- Its presence is what makes scheduling idempotent.
+    cron_job_id  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS outcomes (

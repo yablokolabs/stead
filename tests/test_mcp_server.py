@@ -17,6 +17,7 @@ EXPECTED_TOOLS = {
     "create_goal", "get_goal", "create_event",
     "add_task", "list_tasks", "complete_task", "dismiss_task",
     "propose_reminder", "approve_proposal", "reject_proposal",
+    "schedule_approved_reminder",
     "list_approved_reminders", "due_reminders", "mark_delivered",
     "record_outcome", "add_audit_event",
 }

@@ -18,6 +18,11 @@ from typing import Any, Dict
 
 from mcp.server.fastmcp import FastMCP
 
+from stead_mcp.scheduler import (
+    SchedulerMisconfigured,
+    SchedulingRefused,
+    SteadScheduler,
+)
 from stead_mcp.store import ApprovalRequired, SteadStore, UnknownProposal
 
 log = logging.getLogger("stead.mcp")
@@ -42,9 +47,17 @@ def _fail(exc: Exception) -> Dict[str, Any]:
     return {"ok": False, "error": type(exc).__name__, "detail": str(exc)}
 
 
-def build_server(store: SteadStore | None = None) -> FastMCP:
+def build_server(store: SteadStore | None = None,
+                 scheduler: SteadScheduler | None = None) -> FastMCP:
     store = store or build_store()
     mcp = FastMCP("stead")
+
+    def get_scheduler() -> SteadScheduler:
+        """Resolve the scheduler lazily so a missing chat id fails at the tool,
+        not at import — and fails closed rather than defaulting."""
+        if scheduler is not None:
+            return scheduler
+        return SteadScheduler.from_environment(store)
 
     def _audit(tool: str, ok: bool) -> None:
         log.info("tool=%s ok=%s", tool, ok)
@@ -142,19 +155,32 @@ def build_server(store: SteadStore | None = None) -> FastMCP:
         _audit("list_tasks", True)
         return {"ok": True, "tasks": store.list_tasks(status=status or None)}
 
+    def _resolve(task_id: int, status: str, action) -> Dict[str, Any]:
+        """Resolve a task and retire any future job attached to it.
+
+        Delivery is already suppressed by `due_reminders`, which filters on task
+        status. Cancelling the cron job is belt-and-braces: if it fails, nothing
+        is delivered anyway.
+        """
+        action(task_id)
+        cancelled = []
+        try:
+            cancelled = get_scheduler().cancel_for_task(task_id)
+        except SchedulerMisconfigured:
+            pass  # nothing was ever scheduled if the scheduler is unconfigured
+        _audit(f"{status}_task", True)
+        return {"ok": True, "task_id": task_id, "status": status,
+                "cancelled_jobs": cancelled}
+
     @mcp.tool()
     def complete_task(task_id: int) -> Dict[str, Any]:
         """Mark a task done. It stops appearing in briefings and reminders."""
-        store.complete_task(task_id)
-        _audit("complete_task", True)
-        return {"ok": True, "task_id": task_id, "status": "complete"}
+        return _resolve(task_id, "complete", store.complete_task)
 
     @mcp.tool()
     def dismiss_task(task_id: int) -> Dict[str, Any]:
         """Drop a task Kerstin no longer wants. It will not resurface."""
-        store.dismiss_task(task_id)
-        _audit("dismiss_task", True)
-        return {"ok": True, "task_id": task_id, "status": "dismissed"}
+        return _resolve(task_id, "dismissed", store.dismiss_task)
 
     # -- proposals and approval ----------------------------------------------
 
@@ -197,6 +223,24 @@ def build_server(store: SteadStore | None = None) -> FastMCP:
             _audit("reject_proposal", False)
             return _fail(exc)
         _audit("reject_proposal", True)
+        return {"ok": True, **result}
+
+    @mcp.tool()
+    def schedule_approved_reminder(ref: str) -> Dict[str, Any]:
+        """Place the scheduled job for an already-approved reminder.
+
+        Takes only the proposal reference. The delivery destination, the job
+        instruction and the profile all come from protected configuration — they
+        cannot be supplied here. Calling this twice returns the same job rather
+        than creating a second one. Refuses anything not approved.
+        """
+        try:
+            result = get_scheduler().schedule_approved_reminder(ref)
+        except (UnknownProposal, ApprovalRequired, SchedulingRefused,
+                SchedulerMisconfigured) as exc:
+            _audit("schedule_approved_reminder", False)
+            return _fail(exc)
+        _audit("schedule_approved_reminder", True)
         return {"ok": True, **result}
 
     @mcp.tool()
