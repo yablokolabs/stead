@@ -2,10 +2,13 @@
 
 ## Boundaries
 
-**Polaris is out of scope, permanently.** Stead never reads, writes, stops,
-restarts or inspects the `default` profile, `hermes-gateway.service`, or any
-Polaris secret. Verification asserts Polaris's unit is active, its unit file is
-byte-identical, and the default profile's tools are unchanged.
+**Polaris is out of scope, permanently.** The Stead runtime never reads,
+writes, stops or restarts the `default` profile, `hermes-gateway.service`, or
+any Polaris secret. Offline verification asserts that Polaris remains active,
+Stead uses a separate unit that does not reference Polaris's `HERMES_HOME`, and
+the default profile's terminal tool remains enabled. Unit-file byte identity
+and PID stability were checked manually during the build but are not rechecked
+by `verify.sh`; `HANDOFF.md` records that distinction.
 
 **No shared model credential.** Stead uses an application API key owned by the
 demo, read only from `$STEAD_DEMO_HOME/.env`. It does not use Claude Code
