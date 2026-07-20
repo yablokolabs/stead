@@ -215,3 +215,53 @@ def test_migrating_an_existing_database_preserves_her_facts(tmp_path):
     assert [f["name"] for f in facts] == ["bin_day"]
     assert facts[0]["value"] == "Tuesday"
     assert facts[0]["source"] == "stated"
+
+
+# -- the guard must see every write, including its own -------------------------
+
+def test_the_second_of_two_pending_proposals_is_refused(server):
+    """Approving one is a write; the other proposal is now stale."""
+    first = call(server, "propose_fact", name="bin_day", value="Thursday",
+                 source_url=SOURCE_URL)["ref"]
+    second = call(server, "propose_fact", name="bin_day", value="Friday",
+                  source_url=SOURCE_URL)["ref"]
+    call(server, "approve_proposal", ref=first)
+
+    result = call(server, "approve_proposal", ref=second)
+
+    assert result["ok"] is False
+    assert stored(server, "bin_day")["value"] == "Thursday"
+
+
+def test_a_delete_that_removed_nothing_does_not_invalidate_a_proposal(server):
+    """remove_fact on a key never held must not kill an unrelated approval."""
+    ref = call(server, "propose_fact", name="term_ends", value="24 July",
+               source_url=SOURCE_URL)["ref"]
+    # Nothing was ever stored under this name, so this deletes zero rows.
+    call(server, "remove_fact", name="term_ends")
+
+    result = call(server, "approve_proposal", ref=ref)
+
+    assert result["ok"] is True
+    assert stored(server, "term_ends")["value"] == "24 July"
+
+
+def audit_kinds(store):
+    """The audit log has no MCP read path by design, so read it from the store."""
+    return [r["kind"] for r in store._rows(
+        "SELECT kind FROM audit_events WHERE household = ? ORDER BY id",
+        (store.household_id,))]
+
+
+def test_rejecting_a_fact_is_recorded_as_a_fact_rejection(tmp_path):
+    """The audit log is a security artefact; a fact must not log as a reminder."""
+    store = SteadStore(tmp_path / "stead.sqlite")
+    store.migrate()
+    ref = store.propose_fact(name="term_ends", value="24 July",
+                             source_url=SOURCE_URL)["ref"]
+
+    store.reject_proposal(ref)
+
+    kinds = audit_kinds(store)
+    assert "fact_rejected" in kinds
+    assert "reminder_rejected" not in kinds

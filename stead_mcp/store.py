@@ -122,15 +122,17 @@ class SteadStore:
             (self.household_id, name, scope, value, provenance, source,
              source_url, now, now),
         )
+        # Logged here rather than in the callers so that every write is visible
+        # to the staleness guard — including an approved web write, which is
+        # what makes a second pending proposal for the same fact stale.
+        self.add_audit_event("fact_written", f"name={name} scope={scope}")
         return {"name": name, "scope": scope, "value": value, "source": source}
 
     def confirm_fact(self, name: str, value: str, provenance: str,
                      scope: str = "general") -> Dict[str, Any]:
         """Record a fact the user explicitly stated or confirmed."""
-        stored = self._store_fact(name, value, provenance, scope,
-                                  source="stated", source_url=None)
-        self.add_audit_event("fact_written", f"name={name} scope={scope}")
-        return stored
+        return self._store_fact(name, value, provenance, scope,
+                                source="stated", source_url=None)
 
     def _fact_row(self, name: str, scope: str) -> Optional[Dict[str, Any]]:
         return self._row(
@@ -156,11 +158,15 @@ class SteadStore:
                                  provenance=provenance)
 
     def remove_fact(self, name: str, scope: str = "general") -> None:
-        self._write(
+        cur = self._db.execute(
             "DELETE FROM facts WHERE household = ? AND name = ? AND scope = ?",
             (self.household_id, name, scope),
         )
-        self.add_audit_event("fact_removed", f"name={name} scope={scope}")
+        self._db.commit()
+        # Only an actual deletion is a change. Logging a no-op delete would let
+        # the model permanently invalidate its own pending proposal.
+        if cur.rowcount:
+            self.add_audit_event("fact_removed", f"name={name} scope={scope}")
 
     def read_household_context(self) -> Dict[str, Any]:
         """Return the confirmed state. Deliberately takes no household id."""
@@ -383,7 +389,7 @@ class SteadStore:
             "UPDATE proposals SET status = 'rejected', decided_at = ? WHERE id = ?",
             (_now(), proposal["id"]),
         )
-        self.add_audit_event("reminder_rejected", f"ref={ref}")
+        self.add_audit_event(f"{proposal['kind']}_rejected", f"ref={ref}")
         return {"ref": ref, "status": "rejected"}
 
     def list_approved_reminders(self) -> List[Dict[str, Any]]:

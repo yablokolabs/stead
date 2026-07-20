@@ -38,20 +38,29 @@ for TOOLSET in terminal file code_execution browser computer_use skills delegati
 done
 
 echo; echo "== Web search =="
-# Web search is optional. With SEARXNG_URL unset, Hermes drops web_search and
-# web_extract from the registry and there is nothing to assert — that is a
-# valid posture, not a failure. Only check the wiring once it is switched on.
+# The pin is asserted whether or not search is switched on. Without it, Hermes'
+# fallback order can resolve a provider this repository never configured — ddgs
+# needs only an importable package, no key and no config — and Stead would gain
+# search with nothing here changing.
+check "web backend pinned to searxng" \
+      "grep -qE '^[[:space:]]*(search_)?backend:[[:space:]]*\"?searxng' ${PROFILE_HOME}/config.yaml"
+
 if grep -qE '^[[:space:]]*(export )?SEARXNG_URL=[^[:space:]]' "${DEMO_HOME}/.env" 2>/dev/null; then
-    check "web toolset enabled (cli)" \
-          "stead-kerstin-demo tools list --platform cli | grep -q 'web '"
-    check "web backend pinned to searxng" \
-          "grep -qE '^[[:space:]]*(search_)?backend:[[:space:]]*.?searxng' ${PROFILE_HOME}/config.yaml"
+    for PLAT in cli telegram; do
+        check "web toolset enabled (${PLAT})" \
+              "stead-kerstin-demo tools list --platform ${PLAT} | grep -q '✓ enabled  web '"
+    done
     check "SEARXNG_URL points at loopback" \
           "grep -qE '^[[:space:]]*(export )?SEARXNG_URL=https?://(127\.0\.0\.1|localhost)(:[0-9]+)?/?\$' ${DEMO_HOME}/.env"
-    check "searxng container is not published on a public interface" \
-          "! docker ps --filter name=stead-searxng --format '{{.Ports}}' 2>/dev/null | grep -qE '(^|[^0-9.])0\.0\.0\.0:'"
+    # Checked separately so an absent container fails rather than vacuously
+    # satisfying the loopback assertion below.
+    check "searxng container is running" \
+          "docker ps --filter name=stead-searxng --format '{{.Names}}' | grep -q stead-searxng"
+    check "searxng publishes on loopback only" \
+          "! docker ps --filter name=stead-searxng --format '{{.Ports}}' | tr ',' '\n' | grep -- '->' | grep -qv '^ *127\.0\.0\.1:'"
 else
-    echo "  SKIP  web search is off (no SEARXNG_URL) — Stead has no web tools"
+    check "no web tools are exposed while search is off" \
+          "! stead-kerstin-demo tools list --platform telegram | grep -q '✓ enabled  web '"
 fi
 
 echo; echo "== Scheduling goes only through the trusted path =="

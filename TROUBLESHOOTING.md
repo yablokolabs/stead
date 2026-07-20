@@ -7,7 +7,7 @@ full unit name.
 ## Diagnose first
 
 ```bash
-./scripts/verify.sh                  # 59 offline checks (63 with web search on)
+./scripts/verify.sh                  # 61 offline checks (65 with web search on)
 ./scripts/check-secrets.sh           # PRESENT/MISSING, never values
 systemctl --user status hermes-gateway-stead-kerstin-demo
 journalctl --user -u hermes-gateway-stead-kerstin-demo -n 50 --no-pager

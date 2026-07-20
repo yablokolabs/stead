@@ -207,28 +207,38 @@ it would find Polaris's token. Verification asserts the provider is pinned and
 no fallback exists. This is a Hermes-level behaviour, not something this project
 can fully close.
 
-## Known residual risk: web provider credentials outside HERMES_HOME
+## Known residual risk: a second env file the gate never sees
 
 `agent/web_search_provider.get_provider_env()` resolves a provider credential
-from `os.environ` first and then from `~/.hermes/.env` — Polaris's environment
-file, outside Stead's `HERMES_HOME`. It is the same shape of hole as the codex
-credential above, applied to search backends.
+from `os.environ` first, then from `get_hermes_home() / ".env"`. Because the
+launcher exports `HERMES_HOME` as the Stead profile, that fallback is
+`~/.hermes/profiles/stead-kerstin-demo/.env` — **inside** the boundary, not
+Polaris's file. It is not a leak across profiles.
 
-`~/.hermes/.env` holds no search-provider key today; this was checked by name,
-without reading any value. But nothing stops one being added later, and if a
-`FIRECRAWL_API_KEY` or similar appeared there, `check_web_api_key()` would light
-up that backend inside the Stead profile without any change to this repository.
+It is, however, a second credential source that nothing in this project reads
+or asserts. `check-secrets.sh` inspects `$STEAD_DEMO_HOME/.env` only, and the
+launcher's ambient scrub happens before Hermes ever consults the profile file,
+so the scrub does not close that path. A `FIRECRAWL_API_KEY` written into the
+profile `.env` would light up that backend with nothing here changing, and the
+secret gate would still report `READY`.
+
+The same applies to `SEARXNG_URL`: `plugins/web/searxng/provider.py` resolves it
+through the same helper, so it can come from the profile `.env` rather than the
+protected one, and the scrub in `stead-launch.sh` does not prevent that.
 
 Mitigated within the Stead boundary:
 
-- `web.backend` is pinned to `searxng`, which is selected explicitly rather than
-  by the legacy preference order.
-- `stead-launch.sh` scrubs `SEARXNG_URL` from the ambient environment before
-  sourcing `$STEAD_DEMO_HOME/.env`, so the endpoint cannot be injected by
-  whatever started the service.
+- `web.backend` is pinned to `searxng`, chosen explicitly rather than by the
+  fallback preference order, so an unconfigured backend is not silently
+  selected. `verify.sh` asserts the pin whether or not search is switched on.
+- `stead-launch.sh` scrubs the search-provider variables from the ambient
+  environment, which closes injection by whatever started the service.
 
-**Residual:** a credential placed in Polaris's env file could still be resolved
-if the pin were removed. Verification asserts the pin.
+**Residual:** the profile's own `.env` is outside the secret gate's view.
+Anyone with write access to the profile directory can add a credential the gate
+will not report. That is the same access level needed to change the pin itself,
+so it widens no privilege — but the gate's `READY` should not be read as "these
+are the only credentials in play".
 
 ## Known residual risk: query logging at raised verbosity
 
