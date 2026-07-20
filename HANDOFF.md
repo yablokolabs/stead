@@ -19,14 +19,14 @@ line is either observed or not done.
       `--profile stead-kerstin-demo`, `Restart=always`, no secrets in the unit
 - [x] Forbidden toolsets disabled on `cli` and `telegram`, including `cronjob` —
       raw scheduling is replaced by `schedule_approved_reminder(ref)`
-- [x] 21 Stead MCP tools registered in the Stead profile only
+- [x] 22 Stead MCP tools registered in the Stead profile only
 - [x] Ambient provider credentials scrubbed by the launcher; `copilot` and
       `qwen-oauth` suppressed in the Stead profile
 - [ ] `openai-codex` remains resolvable from outside the profile — mitigated by
       provider pinning and zero fallbacks, **not fully closed**
       (see `SECURITY.md`, residual risk)
-- [x] 79 tests passing
-- [x] 57 verification checks passing
+- [x] 97 tests passing
+- [x] 59 verification checks passing (63 with web search on)
 - [x] `hermes doctor` clean for the Stead profile
 - [x] No secret, `.env`, database or venv tracked by git
 
@@ -63,8 +63,13 @@ line is either observed or not done.
 ## Tell Kerstin
 
 - Early private preview; it will make mistakes
-- It knows only what she tells it here — no email, calendar, banking or shops
+- It knows what she tells it here, plus what it looks up — no email, calendar,
+  banking or shops
+- It can search the web; it cannot open a page she links, and anything it finds
+  stays a suggestion until she confirms it
 - It cannot act in the outside world; it plans, tracks and reminds
 - Reminders arrive in this Telegram chat only
 - At most two proactive messages a day unless she asks
-- Her data is a local database on one VM and can be erased on request
+- Her household data is a local database on one VM and can be erased on request.
+  Its searches go out through a search service, like anyone else's — it is told
+  to keep her personal details out of them

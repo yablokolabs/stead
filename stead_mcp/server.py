@@ -23,7 +23,12 @@ from stead_mcp.scheduler import (
     SchedulingRefused,
     SteadScheduler,
 )
-from stead_mcp.store import ApprovalRequired, SteadStore, UnknownProposal
+from stead_mcp.store import (
+    ApprovalRequired,
+    StaleProposal,
+    SteadStore,
+    UnknownProposal,
+)
 
 log = logging.getLogger("stead.mcp")
 
@@ -204,11 +209,32 @@ def build_server(store: SteadStore | None = None,
                         f"{result['ref']}."}
 
     @mcp.tool()
+    def propose_fact(name: str, value: str, source_url: str,
+                     scope: str = "general") -> Dict[str, Any]:
+        """Propose a fact you found on the web. This stores NOTHING until approved.
+
+        Use this for anything you learned from a search rather than from
+        Kerstin. Quote the returned reference when asking her to confirm it.
+        """
+        if not name.strip() or not value.strip():
+            _audit("propose_fact", False)
+            return _fail(ValueError("name and value must be non-empty"))
+        if not source_url.strip():
+            _audit("propose_fact", False)
+            return _fail(ValueError("source_url must say where this came from"))
+        result = store.propose_fact(name=name, value=value,
+                                    source_url=source_url, scope=scope)
+        _audit("propose_fact", True)
+        return {"ok": True, **result,
+                "note": "Nothing stored. Ask Kerstin to confirm reference "
+                        f"{result['ref']}."}
+
+    @mcp.tool()
     def approve_proposal(ref: str) -> Dict[str, Any]:
-        """Approve a proposal by its short reference. Only then is it scheduled."""
+        """Approve a proposal by its short reference. Only then does it take effect."""
         try:
             result = store.approve_proposal(ref.strip().upper())
-        except (UnknownProposal, ApprovalRequired) as exc:
+        except (UnknownProposal, ApprovalRequired, StaleProposal) as exc:
             _audit("approve_proposal", False)
             return _fail(exc)
         _audit("approve_proposal", True)

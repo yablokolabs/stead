@@ -3,12 +3,9 @@
 These go through the registered MCP tool surface — the same path the model
 takes — rather than calling the store directly.
 """
-import asyncio
-
 import pytest
 
-from stead_mcp.server import build_server
-from stead_mcp.store import SteadStore
+from helpers import call, run
 
 # Tools that must never appear, and the full set that must.
 EXPECTED_TOOLS = {
@@ -16,36 +13,12 @@ EXPECTED_TOOLS = {
     "confirm_fact", "correct_fact", "remove_fact",
     "create_goal", "get_goal", "create_event",
     "add_task", "list_tasks", "complete_task", "dismiss_task",
+    "propose_fact",
     "propose_reminder", "approve_proposal", "reject_proposal",
     "schedule_approved_reminder",
     "list_approved_reminders", "due_reminders", "mark_delivered",
     "record_outcome", "add_audit_event",
 }
-
-
-def run(coro):
-    return asyncio.run(coro)
-
-
-@pytest.fixture()
-def server(tmp_path):
-    store = SteadStore(tmp_path / "stead.sqlite")
-    store.migrate()
-    return build_server(store=store)
-
-
-def call(server, tool, /, **kwargs):
-    """Invoke an MCP tool and return its structured payload.
-
-    `tool` is positional-only so a tool's own `name` argument cannot collide
-    with this helper's parameters.
-    """
-    result = run(server.call_tool(tool, kwargs))
-    # FastMCP returns (content_blocks, structured_result)
-    payload = result[1] if isinstance(result, tuple) else result
-    if isinstance(payload, dict) and "result" in payload and len(payload) == 1:
-        return payload["result"]
-    return payload
 
 
 # -- surface ------------------------------------------------------------------

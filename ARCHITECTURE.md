@@ -9,11 +9,17 @@ Kerstin
                  ├─ skills/ ................ stead-household-chief-of-staff
                  ├─ memory ................. a few communication preferences
                  ├─ cron ................... approved reminders, check-ins
-                 └─ MCP: stead (stdio)
-                      └─ stead_mcp.server → stead_mcp.store
-                           └─ ~/.stead-demo/stead.sqlite   (mode 600)
-                 └─ model: application API key from ~/.stead-demo/.env
+                 ├─ MCP: stead (stdio)
+                 │    └─ stead_mcp.server → stead_mcp.store
+                 │         └─ ~/.stead-demo/stead.sqlite   (mode 600)
+                 ├─ model: application API key from ~/.stead-demo/.env   ──→ out
+                 └─ web: SearXNG on 127.0.0.1                            ──→ out
+                      └─ upstream search engines
 ```
+
+Two edges leave this machine: the model API, and web search. Everything else is
+local. The SearXNG hop is local, but SearXNG is a proxy — the query itself
+reaches upstream engines. See `SECURITY.md`.
 
 ## Why a Hermes profile
 
@@ -37,6 +43,12 @@ retrieved at the start of every turn and every scheduled run.
 
 Conversations are not archived wholesale. Only confirmed facts and operational
 state are written, each with a timestamp and a provenance string.
+
+Every fact also records **where it came from**. `source` is `'stated'` or
+`'web'`, and unlike the free-text `provenance` string it is set by the code
+path that stored the row, not by the model. Search results reach the database
+only via `propose_fact` → `approve_proposal`; nothing a search returns is
+written without Kerstin approving it.
 
 ## Facts are scoped
 

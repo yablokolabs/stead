@@ -33,6 +33,10 @@ class ApprovalRequired(SteadError):
     """The proposal is not in a state that can be approved."""
 
 
+class StaleProposal(SteadError):
+    """The fact changed after the proposal was made, so approval is not current."""
+
+
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
@@ -75,7 +79,11 @@ class SteadStore:
         CREATE TABLE IF NOT EXISTS silently skips a table that already exists,
         so a column added after first release needs an explicit ALTER.
         """
-        wanted = {("reminders", "cron_job_id"): "TEXT"}
+        wanted = {
+            ("reminders", "cron_job_id"): "TEXT",
+            ("facts", "source"): "TEXT NOT NULL DEFAULT 'stated'",
+            ("facts", "source_url"): "TEXT",
+        }
         for (table, column), coltype in wanted.items():
             existing = {r["name"] for r in self._rows(f"PRAGMA table_info({table})")}
             if column not in existing:
@@ -98,21 +106,48 @@ class SteadStore:
 
     # -- facts ----------------------------------------------------------------
 
-    def confirm_fact(self, name: str, value: str, provenance: str,
-                     scope: str = "general") -> Dict[str, Any]:
-        """Record a fact the user explicitly stated or confirmed."""
+    def _store_fact(self, name: str, value: str, provenance: str, scope: str,
+                    source: str, source_url: Optional[str]) -> Dict[str, Any]:
         now = _now()
         self._write(
             """INSERT INTO facts (household, name, scope, value, provenance,
-                                  created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+                                  source, source_url, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (household, name, scope) DO UPDATE SET
                    value = excluded.value,
                    provenance = excluded.provenance,
+                   source = excluded.source,
+                   source_url = excluded.source_url,
                    updated_at = excluded.updated_at""",
-            (self.household_id, name, scope, value, provenance, now, now),
+            (self.household_id, name, scope, value, provenance, source,
+             source_url, now, now),
         )
-        return {"name": name, "scope": scope, "value": value}
+        return {"name": name, "scope": scope, "value": value, "source": source}
+
+    def confirm_fact(self, name: str, value: str, provenance: str,
+                     scope: str = "general") -> Dict[str, Any]:
+        """Record a fact the user explicitly stated or confirmed."""
+        stored = self._store_fact(name, value, provenance, scope,
+                                  source="stated", source_url=None)
+        self.add_audit_event("fact_written", f"name={name} scope={scope}")
+        return stored
+
+    def _fact_row(self, name: str, scope: str) -> Optional[Dict[str, Any]]:
+        return self._row(
+            "SELECT value, source FROM facts "
+            "WHERE household = ? AND name = ? AND scope = ?",
+            (self.household_id, name, scope),
+        )
+
+    def _audit_high_water(self) -> int:
+        """The latest audit id, used to detect any change made since.
+
+        Comparing values cannot see a change that was undone — she states a
+        fact and then deletes it, leaving the value as it was. Comparing
+        against the audit log sees the round trip.
+        """
+        row = self._row("SELECT MAX(id) AS top FROM audit_events")
+        return int((row or {}).get("top") or 0)
 
     def correct_fact(self, name: str, value: str, provenance: str,
                      scope: str = "general") -> Dict[str, Any]:
@@ -125,14 +160,15 @@ class SteadStore:
             "DELETE FROM facts WHERE household = ? AND name = ? AND scope = ?",
             (self.household_id, name, scope),
         )
+        self.add_audit_event("fact_removed", f"name={name} scope={scope}")
 
     def read_household_context(self) -> Dict[str, Any]:
         """Return the confirmed state. Deliberately takes no household id."""
         return {
             "household_id": self.household_id,
             "facts": self._rows(
-                "SELECT name, scope, value, provenance, updated_at FROM facts "
-                "WHERE household = ? ORDER BY name, scope",
+                "SELECT name, scope, value, provenance, source, source_url, "
+                "updated_at FROM facts WHERE household = ? ORDER BY name, scope",
                 (self.household_id,),
             ),
             "members": self._rows(
@@ -267,8 +303,66 @@ class SteadStore:
             )
         return proposal
 
+    def propose_fact(self, name: str, value: str, source_url: str,
+                     scope: str = "general") -> Dict[str, Any]:
+        """Record a searched claim as a proposal. Stores no fact on its own.
+
+        The value held at proposal time is captured so that a later approval
+        cannot displace something Kerstin has said in the meantime.
+        """
+        ref = self._new_ref()
+        payload = json.dumps({
+            "name": name, "value": value, "scope": scope,
+            "source_url": source_url,
+            "seen_audit": self._audit_high_water(),
+        })
+        proposal_id = self._write(
+            "INSERT INTO proposals (household, ref, kind, payload, created_at) "
+            "VALUES (?, ?, 'fact', ?, ?)",
+            (self.household_id, ref, payload, _now()),
+        )
+        self.add_audit_event("fact_proposed", f"ref={ref}")
+        return {"id": proposal_id, "ref": ref, "status": "pending"}
+
+    def _approve_fact(self, proposal: Dict[str, Any], ref: str) -> Dict[str, Any]:
+        payload = json.loads(proposal["payload"])
+        name, scope = payload["name"], payload["scope"]
+        touched = self._rows(
+            "SELECT 1 FROM audit_events WHERE household = ? AND id > ? "
+            "AND kind IN ('fact_written', 'fact_removed') AND detail = ?",
+            (self.household_id, payload["seen_audit"], f"name={name} scope={scope}"),
+        )
+        if touched:
+            self.add_audit_event("fact_approval_stale", f"ref={ref}")
+            raise StaleProposal(
+                f"{name!r} changed since proposal {ref} was made. "
+                "Ask Kerstin again rather than overwriting what she said."
+            )
+        self._write(
+            "UPDATE proposals SET status = 'approved', decided_at = ? WHERE id = ?",
+            (_now(), proposal["id"]),
+        )
+        held = self._fact_row(name, scope)
+        if held and held["source"] == "stated" and held["value"] == payload["value"]:
+            # The search agreed with her. Corroboration is not a new source:
+            # relabelling the row 'web' would erase that she is the one who
+            # said it.
+            self.add_audit_event("fact_corroborated", f"ref={ref}")
+            return {"ref": ref, "status": "approved", "name": name,
+                    "scope": scope, "value": payload["value"],
+                    "source": "stated"}
+        stored = self._store_fact(
+            name, payload["value"],
+            provenance=f"web search, approved by Kerstin (ref {ref})",
+            scope=scope, source="web", source_url=payload["source_url"],
+        )
+        self.add_audit_event("fact_approved", f"ref={ref}")
+        return {"ref": ref, "status": "approved", **stored}
+
     def approve_proposal(self, ref: str) -> Dict[str, Any]:
         proposal = self._pending(ref)
+        if proposal["kind"] == "fact":
+            return self._approve_fact(proposal, ref)
         self._write(
             "UPDATE proposals SET status = 'approved', decided_at = ? WHERE id = ?",
             (_now(), proposal["id"]),
