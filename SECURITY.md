@@ -32,8 +32,15 @@ fails if any appears.
 
 ## Tool restriction
 
-Enabled for `stead-kerstin-demo`: `memory`, `session_search`, `clarify`,
-`cronjob`, plus the 20 Stead MCP tools.
+Enabled for `stead-kerstin-demo`: `memory`, `session_search`, `clarify`, plus
+the 21 Stead MCP tools.
+
+`cronjob` is **disabled**. Hermes' built-in scheduler tool lets the caller choose
+both the delivery target and the job prompt, which routes around the proposal
+and approval state machine entirely — a reminder could reach Telegram with no
+approval row in SQLite. It is replaced by the single narrow tool
+`schedule_approved_reminder(ref)`, which takes only a proposal reference and
+refuses anything SQLite does not report as approved.
 
 Disabled on both `cli` and `telegram`: `terminal`, `file`, `code_execution`,
 `browser`, `computer_use`, `skills`, `delegation`, `todo`, `web`, `vision`,
@@ -46,6 +53,28 @@ author skills at runtime.
 
 Hermes dangerous-command approvals stay enabled. YOLO mode is not used.
 Verification checks all of this on every run.
+
+## Scheduling
+
+`stead_mcp/scheduler.py` is the only component permitted to create or remove
+cron jobs, and it is not exposed as a general capability.
+
+- **Authority** comes from SQLite: `proposal_status(ref)` must be `approved`.
+  Pending, rejected, unknown and malformed references are all refused before any
+  subprocess runs.
+- **Destination** comes from `STEAD_ALLOWED_TELEGRAM_IDS`. The tool has no
+  chat-id parameter; an ambiguous or absent configuration fails closed.
+- **Instruction** is a fixed template. The only interpolated value is a
+  reference matched against `^[A-Z0-9]{6}$`. Task titles and reminder text never
+  reach the job prompt.
+- **Execution** is a fixed interpreter path, an argv array, `shell=False`, a
+  minimal environment and a timeout. No `--workdir`, `--script` or `--no-agent`.
+- **Profile** is pinned to `stead-kerstin-demo`.
+- **Idempotency**: `reminders.cron_job_id` is recorded only after a successful
+  create. A repeat call returns the existing job instead of creating a second.
+- **Suppression** is two-layered: `due_reminders` filters on task status and
+  `delivered_at`, so completed or dismissed work is never delivered even if the
+  cron cancellation fails.
 
 ## What the MCP server will not accept
 

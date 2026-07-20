@@ -5,17 +5,28 @@ line is either observed or not done.
 
 ## Offline — done and verified
 
-- [x] Polaris unchanged: unit active, unit file byte-identical, PID stable,
-      default profile's tools untouched
+- [x] Polaris healthy — `verify.sh` asserts on every run: service still active,
+      Stead is a separate unit, Stead does not reference Polaris's `HERMES_HOME`,
+      and the default profile still has `terminal` enabled
+- [x] Polaris unit file byte-identical and PID 22680 stable across the whole
+      build — confirmed by sha256 comparison during implementation.
+      **Not re-asserted by `verify.sh`**; re-check manually if it matters:
+      `systemctl --user show -p MainPID --value hermes-gateway.service`
 - [x] Profile `stead-kerstin-demo` with its own config, env, memory, sessions,
       cron and skills
 - [x] Sticky default not switched (`~/.hermes/active_profile` absent)
 - [x] Service `hermes-gateway-stead-kerstin-demo.service` — distinct unit,
       `--profile stead-kerstin-demo`, `Restart=always`, no secrets in the unit
-- [x] Forbidden toolsets disabled on `cli` and `telegram`
-- [x] 20 Stead MCP tools registered in the Stead profile only
-- [x] 33 tests passing
-- [x] 42 verification checks passing
+- [x] Forbidden toolsets disabled on `cli` and `telegram`, including `cronjob` —
+      raw scheduling is replaced by `schedule_approved_reminder(ref)`
+- [x] 21 Stead MCP tools registered in the Stead profile only
+- [x] Ambient provider credentials scrubbed by the launcher; `copilot` and
+      `qwen-oauth` suppressed in the Stead profile
+- [ ] `openai-codex` remains resolvable from outside the profile — mitigated by
+      provider pinning and zero fallbacks, **not fully closed**
+      (see `SECURITY.md`, residual risk)
+- [x] 79 tests passing
+- [x] 57 verification checks passing
 - [x] `hermes doctor` clean for the Stead profile
 - [x] No secret, `.env`, database or venv tracked by git
 

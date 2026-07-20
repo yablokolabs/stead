@@ -22,19 +22,28 @@ bot on the `default` profile is untouched.
 | Bot token | its own | its own |
 | Model credential | its own | its own application API key |
 
-Nothing is shared: not config, memory, sessions, cron, tokens or credentials.
+Config, memory, sessions, cron, skills and the Telegram token are not shared.
+
+**One documented exception.** The Stead profile can still resolve an
+`openai-codex` OAuth token that lives outside its `HERMES_HOME` — the provider
+Polaris uses. Closing it at source would mean modifying `~/.hermes`, which is
+out of scope for this project. Stead never selects that provider: the model
+provider is pinned, no fallback providers are configured, and the launcher fails
+closed rather than reaching for another credential. See the residual-risk
+section in `SECURITY.md`.
 
 ## Layout
 
 ```
 stead_mcp/          SQLite-backed household state, exposed over MCP
   store.py          the store — household bound at construction
-  server.py         the 20 MCP tools
+  server.py         the 21 MCP tools
+  scheduler.py      the only component permitted to touch cron
   schema.sql        idempotent schema
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
 scripts/            setup, verify, check-secrets, reset
-tests/              33 tests, store level and MCP level
+tests/              79 tests — store, MCP, scheduler gate, credential isolation
 ```
 
 State lives in `$STEAD_DEMO_HOME` (default `~/.stead-demo`), mode 700, outside
@@ -46,7 +55,7 @@ git. The database is mode 600.
 ./scripts/setup.sh            # idempotent; installs identity, skill, schema
 $EDITOR ~/.stead-demo/.env    # fill in — see .env.example
 ./scripts/check-secrets.sh    # reports PRESENT/MISSING, never values
-./scripts/verify.sh           # 42 offline checks
+./scripts/verify.sh           # 57 offline checks
 ```
 
 The gateway must not be started until `check-secrets.sh` reports
