@@ -79,6 +79,18 @@ if [[ -f "${CATALOGUE}" ]] && ! grep -qF "\"${MODEL}\"" "${CATALOGUE}"; then
     die "STEAD_MODEL_NAME='${MODEL}' is not in this Hermes build's catalogue"
 fi
 
+# --- 5b. Enforce the pinned model, don't just validate it -------------------
+# Validating STEAD_MODEL_NAME without applying it is worthless: Hermes falls
+# back to its built-in default (observed: claude-fable-5) when the profile has
+# no model key, so the pinned value is silently ignored. Reconcile the profile
+# config with the env file on every start.
+CONFIGURED_MODEL="$(sed -nE 's/^model:[[:space:]]*//p' "${PROFILE_HOME}/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"' ')"
+CONFIGURED_PROVIDER="$(sed -nE 's/^provider:[[:space:]]*//p' "${PROFILE_HOME}/config.yaml" 2>/dev/null | head -1 | tr -d '"'"'"' ')"
+
+if [[ "${CONFIGURED_MODEL}" != "${MODEL}" || "${CONFIGURED_PROVIDER}" != "${PROVIDER}" ]]; then
+    die "profile config (model='${CONFIGURED_MODEL}' provider='${CONFIGURED_PROVIDER}') does not match ${ENV_FILE} (model='${MODEL}' provider='${PROVIDER}'). Reconcile with: stead-kerstin-demo config set model ${MODEL} && stead-kerstin-demo config set provider ${PROVIDER}"
+fi
+
 # --- 6. Telegram destination -------------------------------------------------
 [[ -n "${STEAD_TELEGRAM_BOT_TOKEN:-}"   ]] || die "STEAD_TELEGRAM_BOT_TOKEN is not set"
 [[ -n "${STEAD_ALLOWED_TELEGRAM_IDS:-}" ]] || die "STEAD_ALLOWED_TELEGRAM_IDS is not set"
