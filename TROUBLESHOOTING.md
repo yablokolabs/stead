@@ -26,10 +26,22 @@ in this Hermes version will fail here. Use one it lists.
 **Wrong env file** — secrets go in `~/.stead-demo/.env`, not the repo, not the
 profile directory, not the unit.
 
-**Gemini HTTP 429 / free-tier quota exceeded** — if Stead is still pinned to
-`gemini-3.5-flash`, switch both `STEAD_MODEL_NAME` in `~/.stead-demo/.env` and
-the Hermes profile model to `gemini-2.5-flash`. The launcher fails closed if
+**Gemini HTTP 429 / free-tier quota exceeded** — move to a model with more
+headroom, changing both `STEAD_MODEL_NAME` in `~/.stead-demo/.env` and
+`model.default` in the profile `config.yaml`. The launcher fails closed if
 those two disagree.
+
+Pick the replacement from `.env.example`, not from the Gemini docs: a model
+must be in this Hermes build's catalogue **and** available to your key.
+`gemini-2.5-flash` satisfies the second and not the first, so pinning it stops
+the gateway starting. `gemini-2.5-pro` clears both but has much less free-tier
+headroom, so it is a poor answer to a quota error.
+
+**Stead denies having a tool it does have** — check the tool is really absent
+before believing it: `stead-kerstin-demo tools list --platform telegram`. A
+model will keep denying a capability it has already denied earlier in the same
+conversation, whatever its tool list says. Start a fresh session with `/new`
+in Telegram. Its self-description is not evidence either way.
 
 ## The bot does not answer
 
