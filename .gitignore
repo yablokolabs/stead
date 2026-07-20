@@ -1,0 +1,22 @@
+# Secrets — never commit. The real env file lives in STEAD_DEMO_HOME.
+.env
+.env.*
+!.env.example
+
+# Demo state — lives in STEAD_DEMO_HOME, never in the repo.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
