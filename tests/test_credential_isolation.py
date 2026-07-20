@@ -25,8 +25,15 @@ ANTHROPIC_API_KEY={key}
 """
 
 
-def launch(tmp_path, env_body=None, ambient=None, mode=0o600):
-    """Run the launcher with a scratch demo home. Returns CompletedProcess."""
+def launch(tmp_path, env_body=None, ambient=None, mode=0o600,
+           profile_model="claude-sonnet-4-6", profile_provider="anthropic"):
+    """Run the launcher against a scratch demo home AND a scratch profile.
+
+    The launcher derives the profile path from $HOME, so pointing HOME at a
+    temp tree keeps these tests independent of whatever the live profile is
+    currently pinned to. Otherwise re-pinning the real deployment silently
+    breaks the suite.
+    """
     demo = tmp_path / "demo"
     demo.mkdir(exist_ok=True)
     if env_body is not None:
@@ -34,9 +41,16 @@ def launch(tmp_path, env_body=None, ambient=None, mode=0o600):
         env_file.write_text(env_body)
         env_file.chmod(mode)
 
+    fake_home = tmp_path / "home"
+    profile = fake_home / ".hermes" / "profiles" / "stead-kerstin-demo"
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "config.yaml").write_text(
+        f"model: {profile_model}\nprovider: {profile_provider}\n"
+    )
+
     env = {
         "PATH": "/usr/bin:/bin",
-        "HOME": os.path.expanduser("~"),
+        "HOME": str(fake_home),
         "STEAD_DEMO_HOME": str(demo),
         "EXEC_GUARD": "1",
     }
@@ -142,6 +156,35 @@ def test_a_complete_dedicated_env_file_passes_every_check(tmp_path):
     assert "FATAL" not in out
     assert "provider=anthropic" in out
     assert FAKE_ANTHROPIC not in out          # never echoes the value
+
+
+def test_profile_config_disagreeing_with_the_env_file_fails_closed(tmp_path):
+    """A pinned model is worthless if the profile quietly uses another one."""
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC)   # asks for claude-sonnet-4-6
+
+    result = launch(tmp_path, env_body=body,
+                    profile_model="gemini-3.5-flash", profile_provider="gemini")
+
+    assert result.returncode == 78
+    assert "does not match" in combined(result)
+
+
+def test_a_gemini_configuration_is_accepted(tmp_path):
+    body = (
+        "STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE\n"
+        "STEAD_ALLOWED_TELEGRAM_IDS=111222333\n"
+        "STEAD_MODEL_PROVIDER=gemini\n"
+        "STEAD_MODEL_NAME=gemini-3.5-flash\n"
+        f"GEMINI_API_KEY={FAKE_GEMINI}\n"
+    )
+
+    result = launch(tmp_path, env_body=body,
+                    profile_model="gemini-3.5-flash", profile_provider="gemini")
+
+    out = combined(result)
+    assert "FATAL" not in out
+    assert "provider=gemini" in out
+    assert FAKE_GEMINI not in out
 
 
 # 4 — personal Claude Code credentials are never consulted --------------------
