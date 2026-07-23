@@ -9,6 +9,7 @@ DEMO_HOME="${STEAD_DEMO_HOME:-${HOME}/.stead-demo}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT="hermes-gateway-${PROFILE}.service"
 POLARIS_UNIT="hermes-gateway.service"
+HERMES_BIN="${STEAD_HERMES_BIN:-$(command -v hermes 2>/dev/null || true)}"
 
 PASS=0; FAIL=0
 ok()   { printf '  PASS  %s\n' "$1"; PASS=$((PASS+1)); }
@@ -16,11 +17,15 @@ bad()  { printf '  FAIL  %s\n' "$1"; FAIL=$((FAIL+1)); }
 check(){ if eval "$2" >/dev/null 2>&1; then ok "$1"; else bad "$1"; fi; }
 
 echo "== Polaris is untouched =="
-check "Polaris service still active"        "[[ \$(systemctl --user is-active ${POLARIS_UNIT}) == active ]]"
 check "Polaris unit is a different unit"    "[[ ${UNIT} != ${POLARIS_UNIT} ]]"
 check "Stead does not reference Polaris home" \
       "! grep -q 'HERMES_HOME=${HOME}/.hermes\"' ${HOME}/.config/systemd/user/${UNIT}"
-check "default profile still has terminal"  "hermes tools list --platform cli | grep -q '✓ enabled  terminal'"
+if systemctl --user cat "${POLARIS_UNIT}" >/dev/null 2>&1; then
+    check "existing Polaris service still active" \
+          "[[ \$(systemctl --user is-active ${POLARIS_UNIT}) == active ]]"
+else
+    ok "no default/Polaris gateway exists on this host"
+fi
 
 echo; echo "== Profile isolation =="
 check "profile directory exists"            "[[ -d ${PROFILE_HOME} ]]"
@@ -33,7 +38,7 @@ echo; echo "== Forbidden tools are absent =="
 for TOOLSET in terminal file code_execution browser computer_use skills delegation cronjob x_search; do
     for PLAT in cli telegram; do
         check "${TOOLSET} disabled (${PLAT})" \
-              "stead-kerstin-demo tools list --platform ${PLAT} | grep -q '✗ disabled  ${TOOLSET} '"
+              "${HERMES_BIN} --profile ${PROFILE} tools list --platform ${PLAT} | grep -q '✗ disabled  ${TOOLSET} '"
     done
 done
 
@@ -48,7 +53,7 @@ check "web backend pinned to searxng" \
 if grep -qE '^[[:space:]]*(export )?SEARXNG_URL=[^[:space:]]' "${DEMO_HOME}/.env" 2>/dev/null; then
     for PLAT in cli telegram; do
         check "web toolset enabled (${PLAT})" \
-              "stead-kerstin-demo tools list --platform ${PLAT} | grep -q '✓ enabled  web '"
+              "${HERMES_BIN} --profile ${PROFILE} tools list --platform ${PLAT} | grep -q '✓ enabled  web '"
     done
     check "SEARXNG_URL points at loopback" \
           "grep -qE '^[[:space:]]*(export )?SEARXNG_URL=https?://(127\.0\.0\.1|localhost)(:[0-9]+)?/?\$' ${DEMO_HOME}/.env"
@@ -60,16 +65,16 @@ if grep -qE '^[[:space:]]*(export )?SEARXNG_URL=[^[:space:]]' "${DEMO_HOME}/.env
           "! docker ps --filter name=stead-searxng --format '{{.Ports}}' | tr ',' '\n' | grep -- '->' | grep -qv '^ *127\.0\.0\.1:'"
 else
     check "no web tools are exposed while search is off" \
-          "! stead-kerstin-demo tools list --platform telegram | grep -q '✓ enabled  web '"
+          "! ${HERMES_BIN} --profile ${PROFILE} tools list --platform telegram | grep -q '✓ enabled  web '"
 fi
 
 echo; echo "== Scheduling goes only through the trusted path =="
 check "no raw cron tool on the agent surface" \
-      "! stead-kerstin-demo tools list --platform telegram | grep -q '✓ enabled  cronjob'"
+      "! ${HERMES_BIN} --profile ${PROFILE} tools list --platform telegram | grep -q '✓ enabled  cronjob'"
 check "trusted scheduler exists"            "[[ -f ${REPO}/stead_mcp/scheduler.py ]]"
 check "scheduler pins the Stead profile"    "grep -q 'PROFILE = \"stead-kerstin-demo\"' ${REPO}/stead_mcp/scheduler.py"
 check "scheduler uses argv, never a shell"  "grep -q 'shell=False' ${REPO}/stead_mcp/scheduler.py"
-check "no fallback provider configured"     "stead-kerstin-demo fallback list | grep -q 'No fallback providers'"
+check "no fallback provider configured"     "${HERMES_BIN} --profile ${PROFILE} fallback list | grep -q 'No fallback providers'"
 
 echo; echo "== Credential enforcement =="
 check "launcher exists and is executable"   "[[ -x ${REPO}/scripts/stead-launch.sh ]]"
@@ -84,14 +89,14 @@ check "launcher scrubs ambient keys"        "grep -q 'CLAUDE_CODE_OAUTH_TOKEN' $
 check "launcher never reads Claude Code creds" \
       "! grep -q 'credentials.json' ${REPO}/scripts/stead-launch.sh"
 check "inherited copilot credential suppressed" \
-      "! stead-kerstin-demo auth list | grep -q '^copilot'"
+      "! ${HERMES_BIN} --profile ${PROFILE} auth list | grep -q '^copilot'"
 check "inherited qwen credential suppressed" \
-      "! stead-kerstin-demo auth list | grep -q '^qwen-oauth'"
+      "! ${HERMES_BIN} --profile ${PROFILE} auth list | grep -q '^qwen-oauth'"
 
 echo; echo "== Required tools are present =="
 for TOOLSET in memory clarify; do
     check "${TOOLSET} enabled (telegram)" \
-          "stead-kerstin-demo tools list --platform telegram | grep -q '✓ enabled  ${TOOLSET} '"
+          "${HERMES_BIN} --profile ${PROFILE} tools list --platform telegram | grep -q '✓ enabled  ${TOOLSET} '"
 done
 
 echo; echo "== Service definition =="
@@ -102,6 +107,8 @@ check "launcher hardcodes the profile name" "grep -q 'PROFILE=\"${PROFILE}\"' ${
 check "unit restarts on failure"            "grep -q 'Restart=always' ${HOME}/.config/systemd/user/${UNIT}"
 check "unit contains no secret material" \
       "! grep -qEi '(TOKEN|API_KEY|SECRET|PASSWORD)=' ${HOME}/.config/systemd/user/${UNIT}"
+check "live drop-in has no unresolved placeholder" \
+      "! grep -q '@STEAD_LAUNCHER@' ${HOME}/.config/systemd/user/${UNIT}.d/override.conf"
 
 echo; echo "== Workspace and state =="
 check "workspace is owner-only"             "[[ \$(stat -c %a ${DEMO_HOME}) == 700 ]]"
@@ -114,6 +121,11 @@ cd "${REPO}"
 check "no .env tracked"                     "! git ls-files --error-unmatch .env"
 check "no database tracked"                 "[[ -z \$(git ls-files '*.sqlite*') ]]"
 check "no venv tracked"                     "[[ -z \$(git ls-files '.venv*') ]]"
+check "Python dependencies are locked"      "[[ -f pyproject.toml && -f uv.lock ]]"
+check "runtime has no old-VM home literal" \
+      "! grep -Rqs '/home/azureuser' scripts/stead-launch.sh stead_mcp/scheduler.py systemd/override.conf .env.example"
+check "private backup tooling is tracked" \
+      "[[ -x scripts/export-state.sh && -x scripts/restore-state.sh && -x scripts/bootstrap-vm.sh ]]"
 check "production code never names personal creds" \
       "! git grep -qI 'credentials.json' -- stead_mcp scripts ':!scripts/verify.sh'"
 
@@ -125,7 +137,7 @@ else
 fi
 
 echo; echo "== Secret gate =="
-if "${REPO}/scripts/check-secrets.sh" >/dev/null 2>&1; then
+if EXEC_GUARD=1 "${REPO}/scripts/stead-launch.sh" >/dev/null 2>&1; then
     ok "all required values present — gateway may be started"
 else
     printf '  WAIT  secrets incomplete — gateway must NOT be started\n'

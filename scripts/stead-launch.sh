@@ -12,10 +12,11 @@
 set -euo pipefail
 
 PROFILE="stead-kerstin-demo"
-DEMO_HOME="${STEAD_DEMO_HOME:-/home/azureuser/.stead-demo}"
+DEMO_HOME="${STEAD_DEMO_HOME:-${HOME}/.stead-demo}"
 ENV_FILE="${DEMO_HOME}/.env"
-HERMES_PY="/home/azureuser/.hermes/hermes-agent/venv/bin/python"
 PROFILE_HOME="${HOME}/.hermes/profiles/${PROFILE}"
+HERMES_BIN="${STEAD_HERMES_BIN:-${HOME}/.local/bin/hermes}"
+HERMES_SOURCE="${STEAD_HERMES_SOURCE:-${HOME}/.hermes/hermes-agent}"
 
 die() { echo "stead-launch: FATAL: $*" >&2; exit 78; }   # 78 = do not restart
 
@@ -76,7 +77,7 @@ if [[ "${PROVIDER}" == "anthropic" && "${ANTHROPIC_API_KEY}" != sk-ant-* ]]; the
 fi
 
 # --- 5. Validate the model against the installed catalogue ------------------
-CATALOGUE="${HERMES_MODELS_CATALOGUE:-/home/azureuser/.hermes/hermes-agent/hermes_cli/models.py}"
+CATALOGUE="${HERMES_MODELS_CATALOGUE:-${HERMES_SOURCE}/hermes_cli/models.py}"
 if [[ -f "${CATALOGUE}" ]] && ! grep -qF "\"${MODEL}\"" "${CATALOGUE}"; then
     die "STEAD_MODEL_NAME='${MODEL}' is not in this Hermes build's catalogue"
 fi
@@ -138,4 +139,5 @@ if [[ -n "${EXEC_GUARD:-}" ]]; then
     exit 0
 fi
 
-exec "${HERMES_PY}" -m hermes_cli.main --profile "${PROFILE}" gateway run
+[[ -x "${HERMES_BIN}" ]] || die "Hermes launcher is missing at ${HERMES_BIN}"
+exec "${HERMES_BIN}" --profile "${PROFILE}" gateway run

@@ -4,11 +4,10 @@
 
 **Polaris is out of scope, permanently.** The Stead runtime never reads,
 writes, stops or restarts the `default` profile, `hermes-gateway.service`, or
-any Polaris secret. Offline verification asserts that Polaris remains active,
-Stead uses a separate unit that does not reference Polaris's `HERMES_HOME`, and
-the default profile's terminal tool remains enabled. Unit-file byte identity
-and PID stability were checked manually during the build but are not rechecked
-by `verify.sh`; `HANDOFF.md` records that distinction.
+any Polaris secret. On a host where the default gateway exists, offline
+verification asserts that it remains active and that Stead uses a separate unit
+which does not reference Polaris's `HERMES_HOME`. A new AWS host is allowed to
+have no default gateway at all.
 
 **No shared model credential.** Stead uses an application API key owned by the
 demo, read only from `$STEAD_DEMO_HOME/.env`. It does not use Claude Code
@@ -33,10 +32,30 @@ agent's availability at the mercy of this demo.
 The verification suite greps the unit for `TOKEN|API_KEY|SECRET|PASSWORD` and
 fails if any appears.
 
+## VM migration boundary
+
+The Git repository owns code, the locked Python dependency graph, generated
+profile configuration, identity, skills, and host bootstrap logic. It never
+owns live credentials, Telegram identifiers, household SQLite data, memories,
+sessions, or cron state.
+
+`scripts/export-state.sh` moves those private surfaces into one mode-`0600`
+archive outside the checkout. The exporter briefly stops only Stead, snapshots
+SQLite through the backup API, excludes `auth.json`, generated config, caches,
+logs, binaries, and transient locks, and writes a per-file SHA-256 manifest.
+Restore rejects loose archive permissions, links, path traversal, unexpected
+files, checksum changes, and corrupt SQLite databases. Tracked config is always
+regenerated with new-host paths after restore.
+
+The bundle is sensitive and not encrypted by the repository. It must travel
+over an encrypted private channel or encrypted object storage. A Git clone
+without that bundle creates a clean Stead instance; it cannot recover the old
+household or credentials. See `MIGRATION.md`.
+
 ## Tool restriction
 
 Enabled for `stead-kerstin-demo` on both `cli` and `telegram`: `clarify`,
-`kanban`, `memory`, `session_search`, `web`, plus the 22 Stead MCP tools.
+`memory`, `session_search`, `web`, plus the 22 Stead MCP tools.
 
 `cronjob` is **disabled**. Hermes' built-in scheduler tool lets the caller choose
 both the delivery target and the job prompt, which routes around the proposal

@@ -13,6 +13,11 @@
 *.log
 logs/
 
+# Private VM migration bundles — contain credentials and household history.
+stead-private-*.tar.gz
+stead-backups/
+backups/
+
 # Python
 __pycache__/
 *.py[cod]

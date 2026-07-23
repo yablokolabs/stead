@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stead-preview"
+version = "0.1.0"
+description = "Private household chief-of-staff MCP service for Hermes Agent"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp==1.28.1",
+  "pyyaml==6.0.3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+]
+
+[tool.setuptools]
+packages = ["stead_mcp"]
+
+[tool.setuptools.package-data]
+stead_mcp = ["schema.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

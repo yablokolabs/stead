@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
 import stat
 import subprocess
 from datetime import datetime
@@ -27,8 +28,6 @@ log = logging.getLogger("stead.scheduler")
 
 PROFILE = "stead-kerstin-demo"
 SKILL = "stead-household-chief-of-staff"
-HERMES_PYTHON = Path("/home/azureuser/.hermes/hermes-agent/venv/bin/python")
-HERMES_MAIN = "hermes_cli.main"
 
 REF_PATTERN = re.compile(r"^[A-Z0-9]{6}$")
 CHAT_ID_PATTERN = re.compile(r"^-?\d{1,20}$")
@@ -127,9 +126,21 @@ def _run_argv(argv: List[str]) -> subprocess.CompletedProcess:
                           text=True, timeout=120, check=False)
 
 
+def _default_hermes_cli() -> str:
+    """Resolve the host-local Hermes launcher without pinning a VM username."""
+    configured = os.environ.get("STEAD_HERMES_BIN", "").strip()
+    if configured:
+        return configured
+    home_launcher = Path.home() / ".local" / "bin" / "hermes"
+    if home_launcher.is_file():
+        return str(home_launcher)
+    return shutil.which("hermes") or str(home_launcher)
+
+
 class SteadScheduler:
     def __init__(self, store: SteadStore, chat_id: str,
-                 runner: Callable[[List[str]], subprocess.CompletedProcess] = _run_argv):
+                 runner: Callable[[List[str]], subprocess.CompletedProcess] = _run_argv,
+                 hermes_cli: Optional[str] = None):
         if not chat_id or not CHAT_ID_PATTERN.match(str(chat_id)):
             raise SchedulerMisconfigured(
                 "Stead chat id is missing or malformed. It must come from "
@@ -138,6 +149,7 @@ class SteadScheduler:
         self.store = store
         self.chat_id = str(chat_id)
         self._run = runner
+        self.hermes_cli = hermes_cli or _default_hermes_cli()
 
     # -- configuration --------------------------------------------------------
 
@@ -232,7 +244,7 @@ class SteadScheduler:
         """Remove future jobs for a task that is no longer outstanding."""
         cancelled: List[str] = []
         for row in self.store.scheduled_jobs_for_task(int(task_id)):
-            argv = [str(HERMES_PYTHON), "-m", HERMES_MAIN, "--profile", PROFILE,
+            argv = [self.hermes_cli, "--profile", PROFILE,
                     "cron", "remove", str(row["cron_job_id"])]
             result = self._run(argv)
             if result.returncode == 0:
@@ -252,7 +264,7 @@ class SteadScheduler:
     def _build_argv(self, ref: str, schedule: str) -> List[str]:
         """Fixed executable, pinned profile, templated prompt, no shell."""
         return [
-            str(HERMES_PYTHON), "-m", HERMES_MAIN,
+            self.hermes_cli,
             "--profile", PROFILE,
             "cron", "create", schedule,
             PROMPT_TEMPLATE.format(ref=ref, skill=SKILL),

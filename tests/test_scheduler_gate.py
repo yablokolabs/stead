@@ -55,7 +55,12 @@ def cron():
 
 @pytest.fixture()
 def scheduler(store, cron):
-    return SteadScheduler(store=store, chat_id=REAL_CHAT_ID, runner=cron)
+    return SteadScheduler(
+        store=store,
+        chat_id=REAL_CHAT_ID,
+        runner=cron,
+        hermes_cli="/portable/home/.local/bin/hermes",
+    )
 
 
 def approved_ref(store, title="Buy vegetables"):
@@ -352,7 +357,7 @@ def test_job_is_pinned_to_the_stead_profile(store, scheduler, cron):
     assert argv[argv.index("--profile") + 1] == PROFILE
     assert PROFILE == "stead-kerstin-demo"
     assert "default" not in argv
-    assert "/home/azureuser/.hermes/hermes-agent/venv/bin/python" == argv[0]
+    assert "/portable/home/.local/bin/hermes" == argv[0]
     assert argv[argv.index("--skill") + 1] == "stead-household-chief-of-staff"
 
 

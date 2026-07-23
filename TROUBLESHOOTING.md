@@ -7,7 +7,7 @@ full unit name.
 ## Diagnose first
 
 ```bash
-./scripts/verify.sh                  # 63 offline checks (67 with web search on)
+./scripts/verify.sh                  # 66 offline checks (70 with web search on)
 ./scripts/check-secrets.sh           # PRESENT/MISSING, never values
 systemctl --user status hermes-gateway-stead-kerstin-demo
 journalctl --user -u hermes-gateway-stead-kerstin-demo -n 50 --no-pager
@@ -149,8 +149,9 @@ touch:
 ~/.config/systemd/user/hermes-gateway-stead-kerstin-demo.service.d/override.conf
 ```
 
-A copy is version-controlled at `systemd/override.conf`. If it is lost, the
-gateway silently stops scrubbing ambient credentials. Confirm with:
+A placeholder template is version-controlled at `systemd/override.conf`; the
+live checkout-specific path is rendered by `scripts/setup.sh`. If the drop-in
+is lost, the gateway silently stops scrubbing ambient credentials. Confirm with:
 
 ```bash
 systemctl --user show -p ExecStart --value \
@@ -159,4 +160,7 @@ journalctl --user -u hermes-gateway-stead-kerstin-demo -n 20 | grep 'stead-launc
 ```
 
 Expect a `stead-launch:` line on every start. Its absence means the drop-in is
-missing — restore it and `systemctl --user daemon-reload`.
+missing — run `scripts/setup.sh`, then restart only the Stead service.
+
+For backup, restore, or new-VM failures, follow `MIGRATION.md`. Never put a
+`stead-private-*.tar.gz` bundle inside the repository or paste its contents.

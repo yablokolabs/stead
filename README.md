@@ -42,22 +42,51 @@ stead_mcp/          SQLite-backed household state, exposed over MCP
   schema.sql        idempotent schema
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
-scripts/            setup, verify, check-secrets, reset, setup-searxng
-tests/              111 tests — store, MCP, scheduler gate, credential
+scripts/            bootstrap, setup, verify, backup/restore, reset, SearXNG
+tests/              121 tests — store, MCP, scheduler, credentials, migration
                     isolation, fact provenance
 ```
 
 State lives in `$STEAD_DEMO_HOME` (default `~/.stead-demo`), mode 700, outside
-git. The database is mode 600.
+git. The database is mode 600. The repository is sufficient to recreate the
+software and host configuration; credentials and household history move in a
+separate private bundle described in `MIGRATION.md`.
 
-## Setup
+## Fresh-VM setup
+
+Install the current Hermes Agent release and clone this repository, then:
 
 ```bash
-./scripts/setup.sh            # idempotent; installs identity, skill, schema
+./scripts/bootstrap-vm.sh --no-start
+$EDITOR ~/.stead-demo/.env    # fill in from .env.example
+./scripts/setup.sh --start
+./scripts/verify.sh
+```
+
+The bootstrap creates `.venv` from the committed `uv.lock`, creates the
+isolated profile, renders new-host paths, installs the user systemd service and
+credential-enforcing drop-in, and migrates the database.
+
+For an old-VM to new-AWS migration, export private state first and pass the
+bundle to bootstrap:
+
+```bash
+./scripts/export-state.sh
+# privately copy the printed mode-600 bundle to the new VM
+./scripts/bootstrap-vm.sh --restore /private/path/stead-private-*.tar.gz
+```
+
+See `MIGRATION.md` before deleting the old VM. Secrets and household data must
+never be committed to this repository.
+
+Individual setup commands remain idempotent:
+
+```bash
+./scripts/setup.sh            # identity, skill, config, schema, user service
 ./scripts/setup-searxng.sh    # optional; writes SearXNG config, starts nothing
 $EDITOR ~/.stead-demo/.env    # fill in — see .env.example
 ./scripts/check-secrets.sh    # reports PRESENT/MISSING, never values
-./scripts/verify.sh           # 63 offline checks (67 with web search on)
+./scripts/verify.sh           # offline deployment and test verification
 ```
 
 Web search is optional. Without `SEARXNG_URL`, Hermes drops `web_search` and
@@ -105,4 +134,5 @@ any other path. Deletes demo data only — never the profile or service.
 - `SECURITY.md` — the boundaries and why
 - `DEMO_SCRIPT.md` — the four demonstration journeys
 - `TROUBLESHOOTING.md` — when something misbehaves
+- `MIGRATION.md` — secure backup and clean AWS restore
 - `HANDOFF.md` — the checklist before showing Kerstin
