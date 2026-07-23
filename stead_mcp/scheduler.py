@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import stat
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,69 @@ class SchedulerMisconfigured(Exception):
     """Configuration is missing or unsafe — fail closed rather than guess."""
 
 
+def _protected_destination_config() -> tuple[str, str]:
+    """Read only scheduling IDs from the owner-only Stead env file.
+
+    Hermes deliberately filters parent environment variables before starting a
+    stdio MCP server. The server therefore cannot inherit the destination from
+    the gateway launcher. Read the two non-credential scheduling values from
+    the protected file instead of weakening the MCP environment filter or
+    duplicating private IDs in profile config.
+    """
+    demo_home = Path(os.environ.get("STEAD_DEMO_HOME",
+                                    os.path.expanduser("~/.stead-demo")))
+    env_file = demo_home / ".env"
+    fd: Optional[int] = None
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+        flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(env_file, flags)
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise SchedulerMisconfigured(
+                "Protected Stead environment path must be a regular file."
+            )
+        if stat.S_IMODE(info.st_mode) != 0o600:
+            raise SchedulerMisconfigured(
+                "Protected Stead environment file must have mode 600."
+            )
+        if info.st_uid != os.getuid():
+            raise SchedulerMisconfigured(
+                "Protected Stead environment file must be owned by this user."
+            )
+        stream = os.fdopen(fd, "r", encoding="utf-8")
+        fd = None  # stream owns it from here
+        with stream:
+            lines = stream.read().splitlines()
+    except SchedulerMisconfigured:
+        raise
+    except (OSError, UnicodeError) as exc:
+        raise SchedulerMisconfigured(
+            "Protected Stead environment file could not be read."
+        ) from exc
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+    values: Dict[str, str] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.removeprefix("export ").strip()
+        if name not in ("STEAD_TELEGRAM_CHAT_ID",
+                        "STEAD_ALLOWED_TELEGRAM_IDS"):
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[name] = value.strip()
+
+    return (values.get("STEAD_TELEGRAM_CHAT_ID", ""),
+            values.get("STEAD_ALLOWED_TELEGRAM_IDS", ""))
+
+
 def _run_argv(argv: List[str]) -> subprocess.CompletedProcess:
     """Execute an argv array with no shell and a deliberately minimal env."""
     env = {
@@ -81,23 +145,30 @@ class SteadScheduler:
     def from_environment(cls, store: SteadStore, **kwargs) -> "SteadScheduler":
         """Build from protected configuration only.
 
-        The destination is the single allowed Telegram id. If more than one is
-        configured, refuse rather than pick — an ambiguous destination for a
-        private single-tester preview is a configuration error.
+        Interactive access may have several allowed Telegram IDs, while
+        proactive delivery has one explicit destination. A stdio MCP process
+        gets that pair from the owner-only Stead env file because Hermes strips
+        non-baseline parent variables before spawning it.
         """
-        raw = (os.environ.get("STEAD_TELEGRAM_CHAT_ID")
-               or os.environ.get("STEAD_ALLOWED_TELEGRAM_IDS") or "").strip()
-        if not raw:
+        chat_id = os.environ.get("STEAD_TELEGRAM_CHAT_ID", "").strip()
+        allowed_raw = os.environ.get("STEAD_ALLOWED_TELEGRAM_IDS", "").strip()
+
+        if not chat_id or not allowed_raw:
+            file_chat_id, file_allowed = _protected_destination_config()
+            chat_id = chat_id or file_chat_id
+            allowed_raw = allowed_raw or file_allowed
+
+        ids = [part.strip() for part in allowed_raw.split(",") if part.strip()]
+        if not chat_id:
             raise SchedulerMisconfigured(
                 "No Stead Telegram destination configured "
-                "(STEAD_ALLOWED_TELEGRAM_IDS)."
+                "(STEAD_TELEGRAM_CHAT_ID)."
             )
-        ids = [part.strip() for part in raw.split(",") if part.strip()]
-        if len(ids) != 1:
+        if chat_id not in ids:
             raise SchedulerMisconfigured(
-                f"Expected exactly one Telegram destination, found {len(ids)}."
+                "Stead Telegram destination must name one allowed user."
             )
-        return cls(store=store, chat_id=ids[0], **kwargs)
+        return cls(store=store, chat_id=chat_id, **kwargs)
 
     # -- the trusted path -----------------------------------------------------
 

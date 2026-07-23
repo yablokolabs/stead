@@ -192,7 +192,7 @@ def build_server(store: SteadStore | None = None,
     @mcp.tool()
     def propose_reminder(task_id: int, fire_at: str,
                          message: str) -> Dict[str, Any]:
-        """Propose a reminder. This schedules NOTHING until it is approved.
+        """Propose one reminder occurrence. This schedules NOTHING until approved.
 
         Returns a short reference to quote back when asking Kerstin to approve.
         fire_at must be an ISO 8601 timestamp including a timezone offset.
@@ -271,7 +271,7 @@ def build_server(store: SteadStore | None = None,
 
     @mcp.tool()
     def list_approved_reminders() -> Dict[str, Any]:
-        """List reminders that have been approved and are therefore scheduled."""
+        """List approved reminders, including any whose scheduling later failed."""
         _audit("list_approved_reminders", True)
         return {"ok": True, "reminders": store.list_approved_reminders()}
 

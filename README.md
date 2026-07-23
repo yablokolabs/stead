@@ -43,7 +43,7 @@ stead_mcp/          SQLite-backed household state, exposed over MCP
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
 scripts/            setup, verify, check-secrets, reset, setup-searxng
-tests/              104 tests — store, MCP, scheduler gate, credential
+tests/              111 tests — store, MCP, scheduler gate, credential
                     isolation, fact provenance
 ```
 
@@ -57,7 +57,7 @@ git. The database is mode 600.
 ./scripts/setup-searxng.sh    # optional; writes SearXNG config, starts nothing
 $EDITOR ~/.stead-demo/.env    # fill in — see .env.example
 ./scripts/check-secrets.sh    # reports PRESENT/MISSING, never values
-./scripts/verify.sh           # 61 offline checks (65 with web search on)
+./scripts/verify.sh           # 63 offline checks (67 with web search on)
 ```
 
 Web search is optional. Without `SEARXNG_URL`, Hermes drops `web_search` and

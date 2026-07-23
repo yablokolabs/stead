@@ -19,6 +19,7 @@ FAKE_GEMINI = "AIzaFAKE0000000000000000000000000000000"
 GOOD_ENV_FILE = """\
 STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE
 STEAD_ALLOWED_TELEGRAM_IDS=111222333
+STEAD_TELEGRAM_CHAT_ID=111222333
 STEAD_MODEL_PROVIDER=anthropic
 STEAD_MODEL_NAME=claude-sonnet-4-6
 ANTHROPIC_API_KEY={key}
@@ -173,6 +174,31 @@ def test_a_complete_dedicated_env_file_passes_every_check(tmp_path):
     assert FAKE_ANTHROPIC not in out          # never echoes the value
 
 
+def test_launcher_requires_a_single_reminder_destination(tmp_path):
+    """Access may be multi-user, but reminder delivery must be unambiguous."""
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC).replace(
+        "STEAD_ALLOWED_TELEGRAM_IDS=111222333\n",
+        "STEAD_ALLOWED_TELEGRAM_IDS=111222333,444555666\n",
+    ).replace("STEAD_TELEGRAM_CHAT_ID=111222333\n", "")
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 78
+    assert "STEAD_TELEGRAM_CHAT_ID" in combined(result)
+
+
+def test_reminder_destination_must_be_in_the_access_allowlist(tmp_path):
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC).replace(
+        "STEAD_TELEGRAM_CHAT_ID=111222333",
+        "STEAD_TELEGRAM_CHAT_ID=999888777",
+    )
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 78
+    assert "must name one allowed Telegram user" in combined(result)
+
+
 def test_profile_config_disagreeing_with_the_env_file_fails_closed(tmp_path):
     """A pinned model is worthless if the profile quietly uses another one."""
     body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC)   # asks for claude-sonnet-4-6
@@ -188,6 +214,7 @@ def test_a_gemini_configuration_is_accepted(tmp_path):
     body = (
         "STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE\n"
         "STEAD_ALLOWED_TELEGRAM_IDS=111222333\n"
+        "STEAD_TELEGRAM_CHAT_ID=111222333\n"
         "STEAD_MODEL_PROVIDER=gemini\n"
         "STEAD_MODEL_NAME=gemini-2.5-flash\n"
         f"GEMINI_API_KEY={FAKE_GEMINI}\n"

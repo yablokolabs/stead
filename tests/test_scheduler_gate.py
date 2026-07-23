@@ -185,9 +185,84 @@ def test_ambiguous_configured_destination_fails_closed(store, monkeypatch):
         SteadScheduler.from_environment(store)
 
 
-def test_absent_configured_destination_fails_closed(store, monkeypatch):
+def test_single_allowed_user_is_not_inferred_as_delivery_destination(
+        store, monkeypatch, tmp_path):
+    monkeypatch.delenv("STEAD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.setenv("STEAD_ALLOWED_TELEGRAM_IDS", "111")
+    monkeypatch.setenv("STEAD_DEMO_HOME", str(tmp_path / "missing"))
+
+    with pytest.raises(SchedulerMisconfigured):
+        SteadScheduler.from_environment(store)
+
+
+def test_stdio_filtered_mcp_loads_destination_from_protected_env_file(
+        store, monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "STEAD_ALLOWED_TELEGRAM_IDS=111,222\n"
+        "STEAD_TELEGRAM_CHAT_ID=222\n"
+    )
+    env_file.chmod(0o600)
     monkeypatch.delenv("STEAD_TELEGRAM_CHAT_ID", raising=False)
     monkeypatch.delenv("STEAD_ALLOWED_TELEGRAM_IDS", raising=False)
+    monkeypatch.setenv("STEAD_DEMO_HOME", str(tmp_path))
+
+    scheduler = SteadScheduler.from_environment(store)
+
+    assert scheduler.chat_id == "222"
+
+
+def test_stdio_filtered_mcp_refuses_loose_protected_env_file(
+        store, monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "STEAD_ALLOWED_TELEGRAM_IDS=111,222\n"
+        "STEAD_TELEGRAM_CHAT_ID=222\n"
+    )
+    env_file.chmod(0o644)
+    monkeypatch.delenv("STEAD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("STEAD_ALLOWED_TELEGRAM_IDS", raising=False)
+    monkeypatch.setenv("STEAD_DEMO_HOME", str(tmp_path))
+
+    with pytest.raises(SchedulerMisconfigured, match="mode 600"):
+        SteadScheduler.from_environment(store)
+
+
+def test_stdio_filtered_mcp_refuses_symlinked_protected_env_file(
+        store, monkeypatch, tmp_path):
+    target = tmp_path / "env-target"
+    target.write_text(
+        "STEAD_ALLOWED_TELEGRAM_IDS=111,222\n"
+        "STEAD_TELEGRAM_CHAT_ID=222\n"
+    )
+    target.chmod(0o600)
+    (tmp_path / ".env").symlink_to(target)
+    monkeypatch.delenv("STEAD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("STEAD_ALLOWED_TELEGRAM_IDS", raising=False)
+    monkeypatch.setenv("STEAD_DEMO_HOME", str(tmp_path))
+
+    with pytest.raises(SchedulerMisconfigured):
+        SteadScheduler.from_environment(store)
+
+
+def test_stdio_filtered_mcp_wraps_protected_env_read_errors(
+        store, monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_bytes(b"\xff\xfe")
+    env_file.chmod(0o600)
+    monkeypatch.delenv("STEAD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("STEAD_ALLOWED_TELEGRAM_IDS", raising=False)
+    monkeypatch.setenv("STEAD_DEMO_HOME", str(tmp_path))
+
+    with pytest.raises(SchedulerMisconfigured, match="could not be read"):
+        SteadScheduler.from_environment(store)
+
+
+def test_absent_configured_destination_fails_closed(store, monkeypatch,
+                                                    tmp_path):
+    monkeypatch.delenv("STEAD_TELEGRAM_CHAT_ID", raising=False)
+    monkeypatch.delenv("STEAD_ALLOWED_TELEGRAM_IDS", raising=False)
+    monkeypatch.setenv("STEAD_DEMO_HOME", str(tmp_path / "missing"))
 
     with pytest.raises(SchedulerMisconfigured):
         SteadScheduler.from_environment(store)

@@ -116,8 +116,13 @@ cron jobs, and it is not exposed as a general capability.
 - **Authority** comes from SQLite: `proposal_status(ref)` must be `approved`.
   Pending, rejected, unknown and malformed references are all refused before any
   subprocess runs.
-- **Destination** comes from `STEAD_ALLOWED_TELEGRAM_IDS`. The tool has no
-  chat-id parameter; an ambiguous or absent configuration fails closed.
+- **Destination** comes from the single protected `STEAD_TELEGRAM_CHAT_ID`,
+  which the launcher verifies is numeric and present in
+  `STEAD_ALLOWED_TELEGRAM_IDS`. The tool has no chat-id parameter; an absent,
+  malformed or non-allowlisted destination fails closed.
+  Hermes filters non-baseline variables from stdio MCP children, so the trusted
+  scheduler reads only those two values from the owner-only mode-`600` Stead
+  env file; it does not copy private IDs or credentials into profile config.
 - **Instruction** is a fixed template. The only interpolated value is a
   reference matched against `^[A-Z0-9]{6}$`. Task titles and reminder text never
   reach the job prompt.
@@ -155,8 +160,9 @@ stated evidence rather than an assumption.
 
 ## Access
 
-Only Telegram IDs in `STEAD_ALLOWED_TELEGRAM_IDS` may interact. This is
-Kerstin's numeric ID only.
+Only Telegram IDs in `STEAD_ALLOWED_TELEGRAM_IDS` may interact. Proactive
+reminders are narrower: they always go to the one allowlisted destination in
+`STEAD_TELEGRAM_CHAT_ID`.
 
 **Not yet verified live.** Unauthorised-user rejection has not been tested
 against the real bot, because no bot token is configured yet. It must be tested

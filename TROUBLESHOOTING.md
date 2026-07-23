@@ -7,7 +7,7 @@ full unit name.
 ## Diagnose first
 
 ```bash
-./scripts/verify.sh                  # 61 offline checks (65 with web search on)
+./scripts/verify.sh                  # 63 offline checks (67 with web search on)
 ./scripts/check-secrets.sh           # PRESENT/MISSING, never values
 systemctl --user status hermes-gateway-stead-kerstin-demo
 journalctl --user -u hermes-gateway-stead-kerstin-demo -n 50 --no-pager
@@ -84,6 +84,15 @@ design. Re-state both preferences explicitly and check with
 `mark_delivered` was not called after delivery. `due_reminders` filters on
 `delivered_at IS NULL`, so an undelivered-marked reminder stays due. Check the
 audit log for a `reminder_delivered` entry.
+
+## An approved reminder was not scheduled
+
+Run `scripts/check-secrets.sh` to check that the destination is present, then
+run `EXEC_GUARD=1 scripts/stead-launch.sh` to validate that
+`STEAD_TELEGRAM_CHAT_ID` is numeric and exactly one member of
+`STEAD_ALLOWED_TELEGRAM_IDS`. The access allowlist may contain several trusted
+users; reminder delivery must still have one deterministic destination. Restart only
+`hermes-gateway-stead-kerstin-demo` after correcting the protected env file.
 
 ## A completed task keeps being raised
 

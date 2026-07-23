@@ -25,8 +25,8 @@ line is either observed or not done.
 - [ ] `openai-codex` remains resolvable from outside the profile — mitigated by
       provider pinning and zero fallbacks, **not fully closed**
       (see `SECURITY.md`, residual risk)
-- [x] 104 tests passing
-- [x] 61 verification checks passing (65 with web search on)
+- [x] 111 tests passing
+- [x] 63 verification checks passing (67 with web search on)
 - [x] `hermes doctor` clean for the Stead profile
 - [x] No secret, `.env`, database or venv tracked by git
 
@@ -37,7 +37,8 @@ line is either observed or not done.
 - [ ] Create a Stead-owned application API key — **not** a personal
       subscription credential, not another agent's OAuth
 - [ ] Enter all values in `~/.stead-demo/.env` (see the procedure in the final
-      report — do not paste them into a chat)
+      report — do not paste them into a chat), including one allowlisted
+      `STEAD_TELEGRAM_CHAT_ID` for proactive reminder delivery
 - [ ] `./scripts/check-secrets.sh` reports `SECRET GATE: READY`
 - [ ] `./scripts/verify.sh` still passes
 

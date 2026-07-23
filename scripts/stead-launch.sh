@@ -111,6 +111,18 @@ fi
 # --- 6. Telegram destination -------------------------------------------------
 [[ -n "${STEAD_TELEGRAM_BOT_TOKEN:-}"   ]] || die "STEAD_TELEGRAM_BOT_TOKEN is not set"
 [[ -n "${STEAD_ALLOWED_TELEGRAM_IDS:-}" ]] || die "STEAD_ALLOWED_TELEGRAM_IDS is not set"
+[[ -n "${STEAD_TELEGRAM_CHAT_ID:-}"     ]] || die "STEAD_TELEGRAM_CHAT_ID is not set"
+
+# Access and delivery are separate boundaries. Several trusted household/admin
+# users may talk to the bot, but proactive reminders need one deterministic
+# destination. It must be a numeric member of the access allowlist.
+[[ "${STEAD_TELEGRAM_CHAT_ID}" =~ ^-?[0-9]{1,20}$ ]] \
+    || die "STEAD_TELEGRAM_CHAT_ID is malformed"
+ALLOWED_COMPACT="${STEAD_ALLOWED_TELEGRAM_IDS//[[:space:]]/}"
+case ",${ALLOWED_COMPACT}," in
+    *",${STEAD_TELEGRAM_CHAT_ID},"*) ;;
+    *) die "STEAD_TELEGRAM_CHAT_ID must name one allowed Telegram user" ;;
+esac
 
 # Hermes reads these names; map from the Stead-prefixed ones.
 export TELEGRAM_BOT_TOKEN="${STEAD_TELEGRAM_BOT_TOKEN}"
