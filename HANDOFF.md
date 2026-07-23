@@ -25,8 +25,8 @@ line is either observed or not done.
 - [ ] `openai-codex` remains resolvable from outside the profile — mitigated by
       provider pinning and zero fallbacks, **not fully closed**
       (see `SECURITY.md`, residual risk)
-- [x] 121 tests passing
-- [x] 66 verification checks passing (70 with web search on)
+- [x] 131 tests passing
+- [x] 68 verification checks passing (75 with web search on)
 - [x] `hermes doctor` clean for the Stead profile
 - [x] No secret, `.env`, database or venv tracked by git
 

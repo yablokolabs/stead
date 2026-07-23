@@ -100,7 +100,9 @@ if [[ "${INSTALL_SYSTEMD}" -eq 1 ]]; then
     DROPIN="${HOME}/.config/systemd/user/${UNIT}.d/override.conf"
     PYTHONPATH="${REPO}" "${REPO}/.venv/bin/python" -m stead_mcp.install systemd-dropin \
         --output "${DROPIN}" \
-        --launcher "${REPO}/scripts/stead-launch.sh" >/dev/null
+        --launcher "${REPO}/scripts/stead-launch.sh" \
+        --demo-home "${DEMO_HOME}" \
+        --hermes-bin "${HERMES_BIN}" >/dev/null
     systemctl --user daemon-reload
     systemctl --user enable "${UNIT}" >/dev/null
     say "user service and credential-enforcing drop-in installed"

@@ -43,7 +43,7 @@ stead_mcp/          SQLite-backed household state, exposed over MCP
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
 scripts/            bootstrap, setup, verify, backup/restore, reset, SearXNG
-tests/              121 tests — store, MCP, scheduler, credentials, migration
+tests/              131 tests — store, MCP, scheduler, credentials, migration
                     isolation, fact provenance
 ```
 
@@ -65,7 +65,8 @@ $EDITOR ~/.stead-demo/.env    # fill in from .env.example
 
 The bootstrap creates `.venv` from the committed `uv.lock`, creates the
 isolated profile, renders new-host paths, installs the user systemd service and
-credential-enforcing drop-in, and migrates the database.
+credential-enforcing drop-in, persists custom private-state/Hermes paths across
+service restarts, and migrates the database.
 
 For an old-VM to new-AWS migration, export private state first and pass the
 bundle to bootstrap:

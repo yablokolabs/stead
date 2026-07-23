@@ -10,10 +10,11 @@
 # tied to Kerstin. Say that plainly to anyone who asks.
 set -euo pipefail
 
-CONFIG_DIR="${SEARXNG_CONFIG_DIR:-${HOME}/.stead-demo/searxng}"
+DEMO_HOME="${STEAD_DEMO_HOME:-${HOME}/.stead-demo}"
+CONFIG_DIR="${SEARXNG_CONFIG_DIR:-${DEMO_HOME}/searxng}"
 PORT="${SEARXNG_PORT:-8080}"
 CONTAINER="stead-searxng"
-IMAGE="${SEARXNG_IMAGE:-searxng/searxng@sha256:b8ca38ba06eea544d7555e88321e212ddc0d5c3c7de055419cfb2e5c6bf30812}"
+IMAGE="searxng/searxng@sha256:b8ca38ba06eea544d7555e88321e212ddc0d5c3c7de055419cfb2e5c6bf30812"
 START=0
 
 if [[ "${1:-}" == "--start" ]]; then
@@ -24,6 +25,66 @@ elif [[ $# -gt 0 ]]; then
 fi
 
 say() { printf '  %s\n' "$1"; }
+
+validate_existing_container() {
+    local inspect_file
+    inspect_file="$(mktemp)"
+    chmod 600 "${inspect_file}"
+    if ! docker inspect "${CONTAINER}" >"${inspect_file}"; then
+        rm -f "${inspect_file}"
+        return 1
+    fi
+    if ! python3 - "${inspect_file}" "${IMAGE}" "${PORT}" "${CONFIG_DIR}" <<'PY'
+import json
+import os
+import sys
+
+path, expected_image, expected_port, expected_config = sys.argv[1:]
+errors = []
+try:
+    with open(path, encoding="utf-8") as stream:
+        records = json.load(stream)
+    container = records[0]
+except (OSError, ValueError, IndexError, TypeError, KeyError):
+    print("ERROR: unsafe existing stead-searxng container: invalid inspect data", file=sys.stderr)
+    raise SystemExit(1)
+
+config = container.get("Config") or {}
+host = container.get("HostConfig") or {}
+if config.get("Image") != expected_image:
+    errors.append("image is not the repository-pinned digest")
+bindings = host.get("PortBindings") or {}
+expected_binding = [{"HostIp": "127.0.0.1", "HostPort": expected_port}]
+if set(bindings) != {"8080/tcp"} or bindings.get("8080/tcp") != expected_binding:
+    errors.append("port 8080 is not bound exactly once to 127.0.0.1")
+if host.get("NetworkMode") == "host":
+    errors.append("host networking is forbidden")
+mounts = [
+    mount for mount in (container.get("Mounts") or [])
+    if mount.get("Destination") == "/etc/searxng"
+]
+if len(mounts) != 1 or not mounts[0].get("RW") or os.path.realpath(
+    mounts[0].get("Source", "")
+) != os.path.realpath(expected_config):
+    errors.append("/etc/searxng is not the expected read-write config mount")
+base_url = f"SEARXNG_BASE_URL=http://localhost:{expected_port}/"
+if base_url not in (config.get("Env") or []):
+    errors.append("SEARXNG_BASE_URL does not match the configured port")
+if (host.get("RestartPolicy") or {}).get("Name") != "unless-stopped":
+    errors.append("restart policy is not unless-stopped")
+if errors:
+    print(
+        "ERROR: unsafe existing stead-searxng container: " + "; ".join(errors),
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+    then
+        rm -f "${inspect_file}"
+        return 1
+    fi
+    rm -f "${inspect_file}"
+}
 
 echo "SearXNG configuration for Stead"
 
@@ -86,8 +147,12 @@ EOF
 
 if [[ "${START}" -eq 1 ]]; then
     if docker inspect "${CONTAINER}" >/dev/null 2>&1; then
+        if ! validate_existing_container; then
+            echo "Refusing to start it. Review with 'docker inspect ${CONTAINER}', then remove only that container and rerun this script." >&2
+            exit 1
+        fi
         docker start "${CONTAINER}" >/dev/null
-        say "existing ${CONTAINER} container started"
+        say "validated and started existing ${CONTAINER} container"
     else
         docker run -d \
             --name "${CONTAINER}" \

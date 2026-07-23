@@ -129,8 +129,14 @@ credentials.
 ## Safety and rollback
 
 - `restore-state.sh` requires a mode-`0600` archive, rejects links/path
-  traversal, validates exact file inventory and checksums, and runs SQLite
-  integrity checks.
+  traversal, duplicate or unexpected members, and archive size-limit breaches;
+  it validates exact file inventory, checksums, and SQLite integrity.
+- Every incoming file/tree is staged before the live state is touched. The
+  managed environment, databases and sidecars, memories, sessions, cron state,
+  and routing files are committed together and rolled back together on failure.
+  If post-commit deletion of hidden rollback artifacts fails, restore remains a
+  success, restarts the previously active service, and emits an explicit warning
+  for operator cleanup rather than misreporting a partial restore.
 - Restore never imports profile `config.yaml`, `SOUL.md`, skills, binaries,
   caches, logs, or `auth.json`; tracked assets are regenerated instead.
 - Keep the old VM stopped but recoverable until Telegram access, reminder

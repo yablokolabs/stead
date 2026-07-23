@@ -10,6 +10,8 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT="hermes-gateway-${PROFILE}.service"
 POLARIS_UNIT="hermes-gateway.service"
 HERMES_BIN="${STEAD_HERMES_BIN:-$(command -v hermes 2>/dev/null || true)}"
+SEARXNG_CONFIG_DIR="${SEARXNG_CONFIG_DIR:-${DEMO_HOME}/searxng}"
+SEARXNG_IMAGE="searxng/searxng@sha256:b8ca38ba06eea544d7555e88321e212ddc0d5c3c7de055419cfb2e5c6bf30812"
 
 PASS=0; FAIL=0
 ok()   { printf '  PASS  %s\n' "$1"; PASS=$((PASS+1)); }
@@ -63,6 +65,15 @@ if grep -qE '^[[:space:]]*(export )?SEARXNG_URL=[^[:space:]]' "${DEMO_HOME}/.env
           "docker ps --filter name=stead-searxng --format '{{.Names}}' | grep -q stead-searxng"
     check "searxng publishes on loopback only" \
           "! docker ps --filter name=stead-searxng --format '{{.Ports}}' | tr ',' '\n' | grep -- '->' | grep -qv '^ *127\.0\.0\.1:'"
+    check "searxng uses the pinned image digest" \
+          "[[ \$(docker inspect --format '{{.Config.Image}}' stead-searxng) == ${SEARXNG_IMAGE} ]]"
+    if [[ "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/etc/searxng"}}{{.Source}}|{{.RW}}{{end}}{{end}}' stead-searxng)" == "${SEARXNG_CONFIG_DIR}|true" ]]; then
+        ok "searxng uses the expected config mount"
+    else
+        bad "searxng uses the expected config mount"
+    fi
+    check "searxng restart policy is constrained" \
+          "[[ \$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' stead-searxng) == unless-stopped ]]"
 else
     check "no web tools are exposed while search is off" \
           "! ${HERMES_BIN} --profile ${PROFILE} tools list --platform telegram | grep -q '✓ enabled  web '"
@@ -84,6 +95,10 @@ check "launcher drop-in exists" \
       "[[ -f ${HOME}/.config/systemd/user/${UNIT}.d/override.conf ]]"
 check "effective ExecStart is the launcher" \
       "systemctl --user show -p ExecStart --value ${UNIT} | grep -q 'stead-launch.sh'"
+check "service persists the private workspace path" \
+      "grep -Fq 'Environment=\"STEAD_DEMO_HOME=${DEMO_HOME}\"' ${HOME}/.config/systemd/user/${UNIT}.d/override.conf"
+check "service persists the Hermes executable path" \
+      "grep -Fq 'Environment=\"STEAD_HERMES_BIN=${HERMES_BIN}\"' ${HOME}/.config/systemd/user/${UNIT}.d/override.conf"
 check "unit will not restart a misconfig"   "grep -q 'RestartPreventExitStatus=78' ${HOME}/.config/systemd/user/${UNIT}"
 check "launcher scrubs ambient keys"        "grep -q 'CLAUDE_CODE_OAUTH_TOKEN' ${REPO}/scripts/stead-launch.sh"
 check "launcher never reads Claude Code creds" \

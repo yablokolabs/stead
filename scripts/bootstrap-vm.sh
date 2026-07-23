@@ -6,6 +6,8 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUNDLE=""
 START=1
 SYSTEMD_ARGS=()
+HERMES_BIN="${STEAD_HERMES_BIN:-$(command -v hermes 2>/dev/null || true)}"
+UV_BIN="${STEAD_UV_BIN:-$(command -v uv 2>/dev/null || true)}"
 
 usage() {
     cat <<'EOF'
@@ -29,12 +31,12 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-command -v hermes >/dev/null 2>&1 || {
+[[ -n "${HERMES_BIN}" && -x "${HERMES_BIN}" ]] || {
     echo "ERROR: Hermes Agent is not installed." >&2
     echo "Install it from https://hermes-agent.nousresearch.com/docs, then rerun." >&2
     exit 1
 }
-command -v uv >/dev/null 2>&1 || {
+[[ -n "${UV_BIN}" && -x "${UV_BIN}" ]] || {
     echo "ERROR: uv is not installed (the Hermes installer normally provides it)." >&2
     exit 1
 }

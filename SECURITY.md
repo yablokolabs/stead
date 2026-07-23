@@ -43,9 +43,11 @@ sessions, or cron state.
 archive outside the checkout. The exporter briefly stops only Stead, snapshots
 SQLite through the backup API, excludes `auth.json`, generated config, caches,
 logs, binaries, and transient locks, and writes a per-file SHA-256 manifest.
-Restore rejects loose archive permissions, links, path traversal, unexpected
-files, checksum changes, and corrupt SQLite databases. Tracked config is always
-regenerated with new-host paths after restore.
+Restore rejects loose archive permissions, links, path traversal, duplicate or
+unexpected files, oversized archives, checksum changes, and corrupt SQLite
+databases. It stages and validates every managed state surface before replacing
+anything, then commits them as one rollback-protected transaction. Tracked
+config is always regenerated with new-host paths after restore.
 
 The bundle is sensitive and not encrypted by the repository. It must travel
 over an encrypted private channel or encrypted object storage. A Git clone
@@ -89,6 +91,10 @@ API, and it is a reversal of the original no-egress posture.
 selected by `web.backend: searxng` and `SEARXNG_URL` in
 `$STEAD_DEMO_HOME/.env`. There is no search-vendor account, no API key, and no
 billed subscription tied to Kerstin.
+
+`setup-searxng.sh --start` will not blindly start a pre-existing container. It
+first verifies the pinned image digest, exact loopback port binding, expected
+configuration mount, base URL, non-host networking, and restart policy.
 
 **SearXNG is a metasearch proxy, not a local index.** It forwards each query to
 upstream engines and aggregates their results. Query text does leave this

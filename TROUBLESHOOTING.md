@@ -117,6 +117,27 @@ Nothing in this project writes to `~/.hermes` outside `profiles/stead-kerstin-de
 If Polaris looks wrong, stop and investigate before changing anything — do not
 "fix" it from here.
 
+## SearXNG refuses to start an existing container
+
+`setup-searxng.sh --start` fails closed if `stead-searxng` does not exactly
+match the repository-pinned image, loopback binding, config mount, base URL,
+non-host network constraint, and restart policy. Inspect it before changing
+anything:
+
+```bash
+docker inspect stead-searxng
+```
+
+If it is an obsolete Stead-only container, preserve
+`$STEAD_DEMO_HOME/searxng/settings.yml`, remove only that container, and rerun:
+
+```bash
+docker rm -f stead-searxng
+./scripts/setup-searxng.sh --start
+```
+
+Do not remove unrelated containers or the protected Stead configuration.
+
 ## Start over cleanly
 
 ```bash

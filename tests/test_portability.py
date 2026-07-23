@@ -222,7 +222,7 @@ def test_restore_rejects_archive_path_traversal(tmp_path: Path) -> None:
         )
 
 
-def test_failed_restore_does_not_restart_a_partially_replaced_service(
+def test_invalid_restore_does_not_touch_service(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import stead_mcp.migration as migration
@@ -247,50 +247,7 @@ def test_failed_restore_does_not_restart_a_partially_replaced_service(
             force=True,
             control_service=True,
         )
-    assert service_actions == ["stop"]
-
-
-def test_sqlite_replacement_failure_preserves_main_and_sidecars(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import stead_mcp.migration as migration
-
-    source = tmp_path / "source.sqlite"
-    destination = tmp_path / "destination.sqlite"
-    _database(source, "new")
-    _database(destination, "old")
-    wal = destination.with_name("destination.sqlite-wal")
-    shm = destination.with_name("destination.sqlite-shm")
-    wal.write_text("old wal")
-    shm.write_text("old shm")
-    original_main = destination.read_bytes()
-
-    original_copy = migration.shutil.copyfile
-
-    def fail_copy(_source: Path, _destination: Path) -> None:
-        raise OSError("simulated copy failure")
-
-    monkeypatch.setattr(migration.shutil, "copyfile", fail_copy)
-    with pytest.raises(OSError, match="simulated copy failure"):
-        migration._replace_sqlite(source, destination)
-    assert destination.read_bytes() == original_main
-    assert wal.read_text() == "old wal"
-    assert shm.read_text() == "old shm"
-
-    monkeypatch.setattr(migration.shutil, "copyfile", original_copy)
-    original_rename = Path.rename
-
-    def fail_install(path: Path, target: Path) -> Path:
-        if path.name.startswith(".destination.sqlite.restore-"):
-            raise OSError("simulated install failure")
-        return original_rename(path, target)
-
-    monkeypatch.setattr(Path, "rename", fail_install)
-    with pytest.raises(OSError, match="simulated install failure"):
-        migration._replace_sqlite(source, destination)
-    assert destination.read_bytes() == original_main
-    assert wal.read_text() == "old wal"
-    assert shm.read_text() == "old shm"
+    assert service_actions == []
 
 
 def test_force_restore_clears_optional_state_absent_from_backup(tmp_path: Path) -> None:
