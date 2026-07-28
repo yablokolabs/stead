@@ -79,8 +79,13 @@ fi
 if [[ "${PROVIDER}" == "anthropic" && "${ANTHROPIC_API_KEY}" != sk-ant-* ]]; then
     die "ANTHROPIC_API_KEY is not an application API key (expected sk-ant- prefix)"
 fi
-if [[ "${PROVIDER}" == "gemini" && "${GEMINI_API_KEY}" != AIza* ]]; then
-    die "GEMINI_API_KEY is not a Google AI Studio application API key (expected AIza prefix)"
+# Google issues application keys as AIza... and, more recently, AQ.... An OAuth
+# user credential (ya29./1//) matches neither and cannot authenticate as ?key=.
+if [[ "${PROVIDER}" == "gemini" ]]; then
+    case "${GEMINI_API_KEY}" in
+        AIza*|AQ.*) : ;;
+        *) die "GEMINI_API_KEY is not a Google application API key (expected AIza or AQ. prefix)" ;;
+    esac
 fi
 
 # --- 5. Validate the model against the installed catalogue ------------------

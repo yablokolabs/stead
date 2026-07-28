@@ -16,6 +16,18 @@ CHECK_SECRETS = REPO / "scripts" / "check-secrets.sh"
 
 FAKE_ANTHROPIC = "sk-ant-FAKE0000000000000000000000000000"
 FAKE_GEMINI = "AIzaFAKE0000000000000000000000000000000"
+# Google issues AI Studio application keys in this form as well as the older
+# AIza one. Both authenticate as a ?key= URL parameter; an OAuth token cannot.
+FAKE_GEMINI_CURRENT = "AQ.Ab8RN6FAKE00000000000000000000000000000000000000"
+
+GEMINI_ENV_FILE = """\
+STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE
+STEAD_ALLOWED_TELEGRAM_IDS=111222333
+STEAD_TELEGRAM_CHAT_ID=111222333
+STEAD_MODEL_PROVIDER=gemini
+STEAD_MODEL_NAME=gemini-2.5-flash
+GEMINI_API_KEY={key}
+"""
 
 GOOD_ENV_FILE = """\
 STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE
@@ -163,6 +175,37 @@ def test_unknown_provider_is_refused(tmp_path):
 
     assert result.returncode == 78
     assert "not supported" in combined(result)
+
+
+@pytest.mark.parametrize("key", [FAKE_GEMINI, FAKE_GEMINI_CURRENT])
+def test_a_gemini_application_key_is_accepted_in_either_issued_format(tmp_path, key):
+    """Both formats Google issues must clear the gate."""
+    result = launch(
+        tmp_path,
+        env_body=GEMINI_ENV_FILE.format(key=key),
+        profile_model="gemini-2.5-flash",
+        profile_provider="gemini",
+    )
+
+    assert result.returncode == 0, combined(result)
+
+
+@pytest.mark.parametrize("token", [
+    "ya29.a0FAKE-oauth-access-token-000000000000000",
+    "1//0gFAKE-oauth-refresh-token-00000000000000000",
+])
+def test_a_gemini_oauth_user_credential_is_refused(tmp_path, token):
+    """A user OAuth credential is not an application key, whatever its shape."""
+    result = launch(
+        tmp_path,
+        env_body=GEMINI_ENV_FILE.format(key=token),
+        profile_model="gemini-2.5-flash",
+        profile_provider="gemini",
+    )
+
+    assert result.returncode == 78
+    assert "application API key" in combined(result)
+    assert token not in combined(result)
 
 
 def test_placeholder_gemini_key_is_refused(tmp_path):
