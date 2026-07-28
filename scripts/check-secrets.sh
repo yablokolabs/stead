@@ -26,14 +26,20 @@ echo "  permissions: ${PERMS} (expected: 600 ${USER})"
 echo
 
 present() { grep -qE "^[[:space:]]*(export[[:space:]]+)?$1=[^[:space:]]" "${ENV_FILE}"; }
+placeholder() {
+    grep -qE "^[[:space:]]*(export[[:space:]]+)?$1=.*(REPLACE|000000000)" "${ENV_FILE}"
+}
 
 MISSING=0
 for VAR in "${REQUIRED[@]}"; do
-    if present "${VAR}"; then
-        printf '  %-32s PRESENT\n' "${VAR}"
-    else
+    if ! present "${VAR}"; then
         printf '  %-32s MISSING\n' "${VAR}"
         MISSING=1
+    elif placeholder "${VAR}"; then
+        printf '  %-32s PLACEHOLDER\n' "${VAR}"
+        MISSING=1
+    else
+        printf '  %-32s PRESENT\n' "${VAR}"
     fi
 done
 
@@ -58,11 +64,14 @@ case "${PROVIDER}" in
 esac
 
 if [[ -n "${CRED}" ]]; then
-    if present "${CRED}"; then
-        printf '  %-32s PRESENT\n' "${CRED}"
-    else
+    if ! present "${CRED}"; then
         printf '  %-32s MISSING\n' "${CRED}"
         MISSING=1
+    elif placeholder "${CRED}"; then
+        printf '  %-32s PLACEHOLDER\n' "${CRED}"
+        MISSING=1
+    else
+        printf '  %-32s PRESENT\n' "${CRED}"
     fi
 fi
 

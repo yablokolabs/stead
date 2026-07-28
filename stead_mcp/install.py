@@ -50,7 +50,7 @@ def render_profile_config(
     env_file = (env_file or demo_home / ".env").expanduser().resolve()
 
     settings = _selected_env(
-        env_file, ("STEAD_MODEL_PROVIDER", "STEAD_MODEL_NAME")
+        env_file, ("STEAD_MODEL_PROVIDER", "STEAD_MODEL_NAME", "SEARXNG_URL")
     )
     provider = settings.get("STEAD_MODEL_PROVIDER", DEFAULT_PROVIDER)
     model = settings.get("STEAD_MODEL_NAME", DEFAULT_MODEL)
@@ -59,12 +59,16 @@ def render_profile_config(
     if not _SAFE_VALUE.fullmatch(model):
         raise ValueError("STEAD_MODEL_NAME contains unsupported characters")
 
+    platform_toolsets = ["clarify", "memory", "session_search"]
+    if settings.get("SEARXNG_URL"):
+        platform_toolsets.append("web")
+
     config = {
         "model": {"default": model, "provider": provider},
         "approvals": {"destructive_slash_confirm": False},
         "platform_toolsets": {
-            "cli": ["clarify", "memory", "session_search", "web"],
-            "telegram": ["clarify", "memory", "session_search", "web"],
+            "cli": list(platform_toolsets),
+            "telegram": list(platform_toolsets),
         },
         "web": {"backend": "searxng"},
         "mcp_servers": {

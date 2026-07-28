@@ -67,6 +67,10 @@ esac
 # --- 4. Fail closed on a missing or ambiguous credential ---------------------
 [[ -n "${!NEEDED:-}" ]] || die "${NEEDED} is required for provider '${PROVIDER}' but is not set in ${ENV_FILE}"
 
+case "${!NEEDED}" in
+    *REPLACE*) die "${NEEDED} is still a placeholder in ${ENV_FILE}" ;;
+esac
+
 if [[ -n "${!OTHER:-}" ]]; then
     die "both ${NEEDED} and ${OTHER} are set — refusing to guess which provider to use"
 fi
@@ -74,6 +78,9 @@ fi
 # Reject a Claude Code subscription token masquerading as an application key.
 if [[ "${PROVIDER}" == "anthropic" && "${ANTHROPIC_API_KEY}" != sk-ant-* ]]; then
     die "ANTHROPIC_API_KEY is not an application API key (expected sk-ant- prefix)"
+fi
+if [[ "${PROVIDER}" == "gemini" && "${GEMINI_API_KEY}" != AIza* ]]; then
+    die "GEMINI_API_KEY is not a Google AI Studio application API key (expected AIza prefix)"
 fi
 
 # --- 5. Validate the model against the installed catalogue ------------------
@@ -113,6 +120,12 @@ fi
 [[ -n "${STEAD_TELEGRAM_BOT_TOKEN:-}"   ]] || die "STEAD_TELEGRAM_BOT_TOKEN is not set"
 [[ -n "${STEAD_ALLOWED_TELEGRAM_IDS:-}" ]] || die "STEAD_ALLOWED_TELEGRAM_IDS is not set"
 [[ -n "${STEAD_TELEGRAM_CHAT_ID:-}"     ]] || die "STEAD_TELEGRAM_CHAT_ID is not set"
+
+case "${STEAD_TELEGRAM_BOT_TOKEN}" in
+    *REPLACE*) die "STEAD_TELEGRAM_BOT_TOKEN is still a placeholder in ${ENV_FILE}" ;;
+esac
+[[ "${STEAD_TELEGRAM_BOT_TOKEN}" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] \
+    || die "STEAD_TELEGRAM_BOT_TOKEN is malformed"
 
 # Access and delivery are separate boundaries. Several trusted household/admin
 # users may talk to the bot, but proactive reminders need one deterministic
