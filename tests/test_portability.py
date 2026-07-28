@@ -96,7 +96,37 @@ def test_profile_config_renderer_uses_new_vm_paths(tmp_path: Path) -> None:
     assert server["command"] == str(repo / ".venv" / "bin" / "python")
     assert server["env"]["PYTHONPATH"] == str(repo)
     assert server["env"]["STEAD_DEMO_HOME"] == str(demo)
+    assert "web" not in config["platform_toolsets"]["cli"]
+    assert "web" not in config["platform_toolsets"]["telegram"]
     assert output.stat().st_mode & 0o777 == 0o600
+
+
+def test_profile_config_enables_web_only_with_a_searxng_url(tmp_path: Path) -> None:
+    from stead_mcp.install import render_profile_config
+
+    repo = tmp_path / "checkout"
+    demo = tmp_path / "private"
+    profile = tmp_path / "profile"
+    (repo / ".venv" / "bin").mkdir(parents=True)
+    demo.mkdir()
+    env_file = demo / ".env"
+    env_file.write_text(
+        "STEAD_MODEL_PROVIDER=gemini\n"
+        "STEAD_MODEL_NAME=gemini-test\n"
+        "SEARXNG_URL=http://127.0.0.1:8080\n"
+    )
+    env_file.chmod(0o600)
+
+    output = render_profile_config(
+        profile_home=profile,
+        repo=repo,
+        demo_home=demo,
+        env_file=env_file,
+    )
+    config = yaml.safe_load(output.read_text())
+
+    assert "web" in config["platform_toolsets"]["cli"]
+    assert "web" in config["platform_toolsets"]["telegram"]
 
 
 def test_rendered_profile_config_passes_the_launcher_gate(tmp_path: Path) -> None:

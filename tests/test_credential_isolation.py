@@ -12,6 +12,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 LAUNCHER = REPO / "scripts" / "stead-launch.sh"
+CHECK_SECRETS = REPO / "scripts" / "check-secrets.sh"
 
 FAKE_ANTHROPIC = "sk-ant-FAKE0000000000000000000000000000"
 FAKE_GEMINI = "AIzaFAKE0000000000000000000000000000000"
@@ -79,6 +80,28 @@ def combined(result):
     return result.stdout + result.stderr
 
 
+def check_secrets(tmp_path, env_body):
+    demo = tmp_path / "demo"
+    demo.mkdir()
+    env_file = demo / ".env"
+    env_file.write_text(env_body)
+    env_file.chmod(0o600)
+    catalogue = tmp_path / "models.py"
+    catalogue.write_text('"gemini-2.5-flash"\n')
+    env = os.environ.copy()
+    env.update(
+        STEAD_DEMO_HOME=str(demo),
+        HERMES_MODELS_CATALOGUE=str(catalogue),
+    )
+    return subprocess.run(
+        ["/bin/bash", str(CHECK_SECRETS)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
 # 1 — an ambient key is not used when the Stead env file is absent ------------
 
 def test_ambient_anthropic_key_is_not_used_without_the_stead_env_file(tmp_path):
@@ -140,6 +163,56 @@ def test_unknown_provider_is_refused(tmp_path):
 
     assert result.returncode == 78
     assert "not supported" in combined(result)
+
+
+def test_placeholder_gemini_key_is_refused(tmp_path):
+    body = (
+        "STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE\n"
+        "STEAD_ALLOWED_TELEGRAM_IDS=111222333\n"
+        "STEAD_TELEGRAM_CHAT_ID=111222333\n"
+        "STEAD_MODEL_PROVIDER=gemini\n"
+        "STEAD_MODEL_NAME=gemini-2.5-flash\n"
+        "GEMINI_API_KEY=REPLACE_ME\n"
+    )
+
+    result = launch(
+        tmp_path,
+        env_body=body,
+        profile_model="gemini-2.5-flash",
+        profile_provider="gemini",
+    )
+
+    assert result.returncode == 78
+    assert "placeholder" in combined(result).lower()
+
+
+def test_placeholder_telegram_token_is_refused(tmp_path):
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC).replace(
+        "STEAD_TELEGRAM_BOT_TOKEN=123456789:FAKE",
+        "STEAD_TELEGRAM_BOT_TOKEN=REPLACE_ME",
+    )
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 78
+    assert "placeholder" in combined(result).lower()
+
+
+def test_secret_preflight_reports_placeholders_as_not_ready(tmp_path):
+    body = (
+        "STEAD_TELEGRAM_BOT_TOKEN=REPLACE_ME\n"
+        "STEAD_ALLOWED_TELEGRAM_IDS=000000000\n"
+        "STEAD_TELEGRAM_CHAT_ID=000000000\n"
+        "STEAD_MODEL_PROVIDER=gemini\n"
+        "STEAD_MODEL_NAME=gemini-2.5-flash\n"
+        "GEMINI_API_KEY=REPLACE_ME\n"
+    )
+
+    result = check_secrets(tmp_path, body)
+
+    assert result.returncode != 0
+    assert "PLACEHOLDER" in combined(result)
+    assert "SECRET GATE: NOT READY" in combined(result)
 
 
 def test_model_outside_the_catalogue_is_refused(tmp_path):
