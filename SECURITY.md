@@ -32,6 +32,38 @@ agent's availability at the mercy of this demo.
 The verification suite greps the unit for `TOKEN|API_KEY|SECRET|PASSWORD` and
 fails if any appears.
 
+### The env file is parsed, never executed
+
+`stead-launch.sh` reads the env file line by line and exports each assignment as
+a literal string. It does not `source` it.
+
+The distinction is not cosmetic. `source` executes the file, so every line of it
+runs with the launcher's privileges *before* any credential check happens — and
+the launcher runs as the user that owns the Telegram token, the model key and
+the household database. A file whose only job is to carry seven assignments
+should never be a code path.
+
+On 2026-08-04 the live `~/.stead-demo/.env` was found to have grown from 784
+bytes to 18,403: a 345-line vendor onboarding document had been appended to it,
+written in the second person to AI agents, carrying an install command and an
+OAuth authorization flow. Its origin was not established. Under `source` that
+content would have executed, including its `$(...)` substitutions; in practice
+`set -e` would have aborted the launcher on the first line of prose, so the
+first symptom would have been a gateway that refused to restart.
+
+The launcher now stops with `exit 78` and names the offending line number —
+never its contents, which may themselves be a credential. Values containing
+`$(...)` or backticks are exported as those literal characters. Quotes are
+stripped, because `source` stripped them and valid files rely on it.
+
+This closes execution, not writing. Anything able to write to a mode-`600` file
+in a mode-`700` directory already holds the user's own privileges; the gate
+ensures such a file cannot escalate itself into a running process, and that the
+tampering is reported rather than silently absorbed. It is worth reading
+alongside **Known residual risk: a second env file the gate never sees** below,
+which anticipated a `FIRECRAWL_API_KEY` arriving through a path this project
+does not inspect.
+
 ## VM migration boundary
 
 The Git repository owns code, the locked Python dependency graph, generated

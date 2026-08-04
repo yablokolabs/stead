@@ -110,6 +110,40 @@ Then send Stead a benign Telegram message and create one real reminder through
 the normal proposal/approval flow. Confirm delivery before terminating the old
 VM.
 
+## The nightly fleet backup is a second, unattended copy
+
+`export-state.sh` is deliberate and operator-driven: you run it when you are
+about to move VMs. It is not a schedule, so between migrations nothing is
+protected.
+
+The host's fleet backup covers that gap. `~/yablokolabs/bots_soul/backup-bots.sh`
+runs nightly at 21:30 UTC under `bots-backup.timer` and uploads one GitHub
+release per run to the private `yablokolabs/bots-vault`. Two of its archives
+carry Stead:
+
+- `hermes-state.tar.zst` — all of `~/.hermes`, which includes the
+  `stead-kerstin-demo` profile: memories, sessions, cron jobs and `state.db`
+- `stead-demo-state.tar.zst` — all of `~/.stead-demo`: the household database
+  and the protected env file
+
+Each SQLite database is snapshotted with `VACUUM INTO` rather than copied, then
+extracted and integrity-checked before the release is created; a database that
+will not restore aborts the run instead of shipping.
+
+Two things this is **not**:
+
+- **It is not encrypted.** The vault repository holds plaintext credentials by a
+  deliberate decision recorded in `backup-bots.sh`, after an encrypted scheme
+  lost its key in July 2026 and produced five days of unreadable backups. Read
+  access to `bots-vault` is therefore equivalent to holding Stead's Telegram
+  token, model key and Kerstin's household history. Restrict it accordingly — it
+  now contains a third party's personal data, not only your own bot credentials.
+- **It is not a substitute for this document.** The archives are host state, not
+  a rendered deployment. A restore still needs this repository cloned and
+  `setup.sh` run to regenerate profile paths for the new host. Use
+  `export-state.sh` for a planned migration; use the vault when the VM is gone
+  and there is no export to hand.
+
 ## Fresh install without old private state
 
 Run:
