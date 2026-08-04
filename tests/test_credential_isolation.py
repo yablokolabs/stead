@@ -396,3 +396,111 @@ def test_a_mismatched_pin_still_fails_closed_in_either_layout(tmp_path, config_s
 
     assert result.returncode == 78
     assert "does not match" in combined(result)
+
+
+# 9 — the env file is data, never a script ------------------------------------
+#
+# On 2026-08-04 a 345-line vendor onboarding document was appended to the live
+# `~/.stead-demo/.env`, addressed to AI agents and carrying install commands and
+# an OAuth flow. The launcher loaded that file with `source`, which executes it.
+# Whatever put the content there, the credentials file is only ever a list of
+# assignments, and the launcher must treat it as one.
+
+
+def test_a_bare_command_in_the_env_file_is_never_executed(tmp_path):
+    marker = tmp_path / "executed-bare"
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC) + f"touch {marker}\n"
+
+    result = launch(tmp_path, env_body=body)
+
+    assert not marker.exists(), "the launcher executed a command from the env file"
+    assert result.returncode == 78
+
+
+def test_command_substitution_in_the_env_file_is_never_executed(tmp_path):
+    """Shaped like an assignment, but `source` would still run the subshell."""
+    marker = tmp_path / "executed-subshell"
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC) + f"SESSION_ID=$(touch {marker})\n"
+
+    result = launch(tmp_path, env_body=body)
+
+    assert not marker.exists(), "the launcher executed a command substitution"
+
+
+def test_backtick_substitution_in_the_env_file_is_never_executed(tmp_path):
+    marker = tmp_path / "executed-backtick"
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC) + f"SESSION_ID=`touch {marker}`\n"
+
+    result = launch(tmp_path, env_body=body)
+
+    assert not marker.exists(), "the launcher executed a backtick substitution"
+
+
+def test_prose_in_the_env_file_is_refused(tmp_path):
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC) + "---\nname: firecrawl\n"
+
+    result = launch(tmp_path, env_body=body)
+
+    out = combined(result)
+    assert result.returncode == 78
+    assert "not a variable assignment" in out
+    assert "line 7" in out
+
+
+def test_a_rejected_line_is_reported_without_its_content(tmp_path):
+    """The tampered line may itself carry a credential. Report where, not what."""
+    secret = "sk-ant-LEAKED00000000000000000000000000"
+    body = GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC) + f"prose mentioning {secret}\n"
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 78
+    assert secret not in combined(result)
+
+
+def test_quoted_values_are_loaded_without_their_quotes(tmp_path):
+    """`source` stripped quotes; the parser that replaces it must too, or every
+    downstream format check fails on a file that was always valid."""
+    body = (
+        'STEAD_TELEGRAM_BOT_TOKEN="123456789:FAKE"\n'
+        "STEAD_ALLOWED_TELEGRAM_IDS='111222333'\n"
+        'STEAD_TELEGRAM_CHAT_ID="111222333"\n'
+        "STEAD_MODEL_PROVIDER=anthropic\n"
+        "STEAD_MODEL_NAME=claude-sonnet-4-6\n"
+        f'ANTHROPIC_API_KEY="{FAKE_ANTHROPIC}"\n'
+    )
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 0, combined(result)
+
+
+def test_an_exported_assignment_is_accepted(tmp_path):
+    body = "".join(
+        f"export {line}\n"
+        for line in GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC).splitlines()
+    )
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 0, combined(result)
+
+
+def test_comments_and_blank_lines_are_still_allowed(tmp_path):
+    body = (
+        "# Stead Preview — private environment.\n"
+        "\n"
+        + GOOD_ENV_FILE.format(key=FAKE_ANTHROPIC)
+        + "\n   \n# trailing comment\n"
+    )
+
+    result = launch(tmp_path, env_body=body)
+
+    assert result.returncode == 0, combined(result)
+
+
+def test_the_launcher_does_not_source_the_env_file():
+    text = LAUNCHER.read_text()
+
+    assert 'source "${ENV_FILE}"' not in text
+    assert '. "${ENV_FILE}"' not in text

@@ -47,10 +47,33 @@ PERM="$(stat -c '%a' "${ENV_FILE}")"
 OWNER="$(stat -c '%U' "${ENV_FILE}")"
 [[ "${OWNER}" == "$(id -un)" ]] || die "${ENV_FILE} is owned by ${OWNER}, expected $(id -un)"
 
-set -a
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
-set +a
+# The env file is data, not a script. `source` would execute every line of it,
+# so anything appended to the file — by a stray tool, a mis-targeted installer,
+# or a document written to be read by an agent — would run with the launcher's
+# privileges before a single credential check happened.
+#
+# Parsing it instead makes tampering inert: a line that is not an assignment
+# stops the launcher, and a value containing $(...) or backticks is exported as
+# those literal characters rather than evaluated. Quotes are stripped because
+# `source` stripped them, and existing valid files rely on that.
+ENV_LINENO=0
+while IFS= read -r ENV_LINE || [[ -n "${ENV_LINE}" ]]; do
+    ENV_LINENO=$((ENV_LINENO + 1))
+    if [[ "${ENV_LINE}" =~ ^[[:space:]]*(#|$) ]]; then
+        continue
+    fi
+    if [[ ! "${ENV_LINE}" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        # Never echo the line: a tampered file may still hold a real credential.
+        die "${ENV_FILE} line ${ENV_LINENO} is not a variable assignment — refusing to load a tampered credentials file"
+    fi
+    ENV_NAME="${BASH_REMATCH[2]}"
+    ENV_VALUE="${BASH_REMATCH[3]}"
+    case "${ENV_VALUE}" in
+        \"*\") ENV_VALUE="${ENV_VALUE#\"}"; ENV_VALUE="${ENV_VALUE%\"}" ;;
+        \'*\') ENV_VALUE="${ENV_VALUE#\'}"; ENV_VALUE="${ENV_VALUE%\'}" ;;
+    esac
+    export "${ENV_NAME}=${ENV_VALUE}"
+done < "${ENV_FILE}"
 
 # --- 3. Pin provider and model ----------------------------------------------
 PROVIDER="${STEAD_MODEL_PROVIDER:-}"

@@ -43,7 +43,7 @@ stead_mcp/          SQLite-backed household state, exposed over MCP
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
 scripts/            bootstrap, setup, verify, backup/restore, reset, SearXNG
-tests/              131 tests — store, MCP, scheduler, credentials, migration
+tests/              148 tests — store, MCP, scheduler, credentials, migration
                     isolation, fact provenance
 ```
 
