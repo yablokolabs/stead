@@ -40,11 +40,15 @@ stead_mcp/          SQLite-backed household state, exposed over MCP
   server.py         the 22 MCP tools
   scheduler.py      the only component permitted to touch cron
   schema.sql        idempotent schema
+stead_voice/        speech providers, loaded by Hermes as a plugin
+  mcp_client.py     one short-lived Sarvam MCP process per call
+  stt.py            transcription — Sarvam Saaras
+  tts.py            synthesis — Sarvam Bulbul (registered, not selected)
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
 scripts/            bootstrap, setup, verify, backup/restore, reset, SearXNG
-tests/              148 tests — store, MCP, scheduler, credentials, migration
-                    isolation, fact provenance
+tests/              167 tests — store, MCP, scheduler, credentials, migration
+                    isolation, fact provenance, speech
 ```
 
 State lives in `$STEAD_DEMO_HOME` (default `~/.stead-demo`), mode 700, outside
@@ -110,6 +114,31 @@ journalctl --user -u hermes-gateway-stead-kerstin-demo -f
 Never run bare `hermes gateway ...` for Stead — that targets the default
 profile, which is Polaris. Use the `stead-kerstin-demo` wrapper or the unit
 name above.
+
+## Talking to Stead
+
+Send a Telegram voice note and Stead answers with one — a voice bubble carrying
+the text as its caption. Type instead and the reply is text. Both arrive in the
+same conversation, so a fact given by voice can be asked about by text and back
+again without losing the thread; voice is transcribed into the ordinary turn
+before Stead sees it.
+
+Requires `SARVAM_API_KEY` in the protected env file, and `ffmpeg` on PATH.
+Without the key, voice notes fail with a short apology and typed messages carry
+on working.
+
+Stead hears through Sarvam and speaks through Microsoft Edge's
+`en-GB-RyanNeural`. Sarvam has no British voice, so the two halves use different
+providers — see `ARCHITECTURE.md` for why, and for what to change if Indian
+English is acceptable. The other British male is `en-GB-ThomasNeural`.
+
+Per-chat overrides, if the default is ever wrong for someone:
+
+```
+/voice off      never answer aloud in this chat
+/voice on       answer aloud when spoken to
+/voice tts      answer aloud to everything, including typed messages
+```
 
 ## Model credential
 

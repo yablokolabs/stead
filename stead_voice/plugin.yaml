@@ -1,0 +1,7 @@
+name: stead_voice
+display_name: stead-voice
+version: 1.0.0
+description: "Sarvam speech-to-text and text-to-speech providers, so Stead can be spoken to and answer aloud through Telegram voice notes."
+author: Yabloko Labs
+requires_env:
+  - SARVAM_API_KEY

@@ -129,6 +129,84 @@ def test_profile_config_enables_web_only_with_a_searxng_url(tmp_path: Path) -> N
     assert "web" in config["platform_toolsets"]["telegram"]
 
 
+def test_rendered_profile_config_makes_stead_answer_voice_notes(tmp_path: Path) -> None:
+    """Voice survives a re-run of setup.sh.
+
+    `render_profile_config` writes the whole file, so anything configured by
+    hand is erased on the next run. These four keys are what turn a Telegram
+    voice note into a spoken reply.
+    """
+    from stead_mcp.install import render_profile_config
+
+    repo = tmp_path / "checkout"
+    demo = tmp_path / "private"
+    (repo / ".venv" / "bin").mkdir(parents=True)
+    demo.mkdir()
+    env_file = demo / ".env"
+    env_file.write_text("STEAD_MODEL_PROVIDER=gemini\nSTEAD_MODEL_NAME=gemini-test\n")
+    env_file.chmod(0o600)
+
+    output = render_profile_config(
+        profile_home=tmp_path / "profile", repo=repo, demo_home=demo, env_file=env_file,
+    )
+    config = yaml.safe_load(output.read_text())
+
+    # Sarvam hears. Routing by name is what reaches the plugin at all.
+    assert config["stt"]["enabled"] is True
+    assert config["stt"]["provider"] == "sarvam"
+    # Something British speaks. Held as a locale invariant rather than a voice
+    # name so swapping Ryan for Thomas stays a one-line change.
+    assert config["tts"]["edge"]["voice"].startswith("en-GB")
+    # Without this the reply is silent — the bug that shipped on 2026-08-11.
+    assert config["voice"]["auto_tts"] is True
+    # Plugins are opt-in; an unlisted plugin never loads.
+    assert "stead_voice" in config["plugins"]["enabled"]
+
+
+def test_every_enabled_plugin_actually_exists(tmp_path: Path) -> None:
+    """A typo in the allow-list fails silently — the plugin just never loads."""
+    from stead_mcp.install import render_profile_config
+
+    repo = tmp_path / "checkout"
+    demo = tmp_path / "private"
+    (repo / ".venv" / "bin").mkdir(parents=True)
+    demo.mkdir()
+    env_file = demo / ".env"
+    env_file.write_text("STEAD_MODEL_PROVIDER=gemini\nSTEAD_MODEL_NAME=gemini-test\n")
+    env_file.chmod(0o600)
+
+    config = yaml.safe_load(render_profile_config(
+        profile_home=tmp_path / "profile", repo=repo, demo_home=demo, env_file=env_file,
+    ).read_text())
+
+    for name in config["plugins"]["enabled"]:
+        assert (REPO / name / "plugin.yaml").is_file(), f"{name} is not a plugin in this repo"
+
+
+def test_voice_plugin_is_reachable_from_the_profile(tmp_path: Path) -> None:
+    """Hermes only scans `<profile>/plugins`, so the package has to appear there."""
+    from stead_mcp.install import install_voice_plugin
+
+    profile = tmp_path / "profile"
+
+    link = install_voice_plugin(profile_home=profile, repo=REPO)
+
+    assert (link / "plugin.yaml").is_file()
+    assert (link / "stt.py").is_file()
+
+
+def test_installing_the_voice_plugin_twice_is_harmless(tmp_path: Path) -> None:
+    """setup.sh is documented as safe to re-run."""
+    from stead_mcp.install import install_voice_plugin
+
+    profile = tmp_path / "profile"
+
+    install_voice_plugin(profile_home=profile, repo=REPO)
+    link = install_voice_plugin(profile_home=profile, repo=REPO)
+
+    assert (link / "plugin.yaml").is_file()
+
+
 def test_rendered_profile_config_passes_the_launcher_gate(tmp_path: Path) -> None:
     from stead_mcp.install import render_profile_config
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Dict, Iterable, Optional
 
@@ -13,6 +14,12 @@ PROFILE = "stead-kerstin-demo"
 DEFAULT_PROVIDER = "gemini"
 DEFAULT_MODEL = "gemini-3.1-flash-lite-preview"
 _SAFE_VALUE = re.compile(r"^[A-Za-z0-9._:/+-]+$")
+
+# Speech. The plugin package in this repo, the name Hermes routes `stt.provider`
+# by, and the voice Stead answers in.
+VOICE_PLUGIN = "stead_voice"
+STT_PROVIDER = "sarvam"
+BRITISH_MALE_VOICE = "en-GB-RyanNeural"
 
 
 def _selected_env(path: Path, names: Iterable[str]) -> Dict[str, str]:
@@ -82,6 +89,19 @@ def render_profile_config(
                 "enabled": True,
             }
         },
+        # Speech. Plugins are opt-in, so an unlisted stead_voice never loads
+        # and both providers below would fall back to Hermes' defaults.
+        "plugins": {"enabled": [VOICE_PLUGIN]},
+        "stt": {"enabled": True, "provider": STT_PROVIDER},
+        # Sarvam has no British voice — confirmed by Sarvam 2026-08-11, whose
+        # Bulbul model speaks English only as en-IN. Edge does, so Stead hears
+        # through Sarvam and speaks through Edge. Both sit behind the same
+        # provider interface, so this line is the whole switch.
+        "tts": {"provider": "edge", "edge": {"voice": BRITISH_MALE_VOICE}},
+        # Without this a voice note comes back as text: the per-chat /voice
+        # mode is keyed on the chat you talk from, not on the reminder
+        # destination, so relying on it silently misses household members.
+        "voice": {"auto_tts": True},
     }
 
     profile_home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -91,6 +111,36 @@ def render_profile_config(
     temporary.chmod(0o600)
     os.replace(temporary, output)
     return output
+
+
+def install_voice_plugin(*, profile_home: Path, repo: Path) -> Path:
+    """Expose this checkout's speech plugin to Hermes.
+
+    Hermes only scans ``<HERMES_HOME>/plugins``, so the package is linked
+    rather than copied — an edit in the checkout is live on the next gateway
+    start, and there is no second copy to drift.
+    """
+    profile_home = profile_home.expanduser().resolve()
+    source = (repo.expanduser().resolve() / VOICE_PLUGIN)
+    if not (source / "plugin.yaml").is_file():
+        raise FileNotFoundError(f"{source} is not a Hermes plugin (no plugin.yaml)")
+
+    plugins = profile_home / "plugins"
+    plugins.mkdir(parents=True, exist_ok=True, mode=0o700)
+    link = plugins / VOICE_PLUGIN
+
+    # Re-runnable: replace whatever is there unless it already points home.
+    if link.is_symlink():
+        if link.readlink() == source:
+            return link
+        link.unlink()
+    elif link.is_dir():
+        shutil.rmtree(link)
+    elif link.exists():
+        link.unlink()
+
+    link.symlink_to(source, target_is_directory=True)
+    return link
 
 
 def _systemd_environment(name: str, value: Path) -> str:
@@ -150,6 +200,9 @@ def main() -> int:
             demo_home=args.demo_home,
             env_file=args.env_file,
         )
+        # The config above names stead_voice; this is what makes it resolvable.
+        # Rendering one without the other leaves Stead mute.
+        install_voice_plugin(profile_home=args.profile_home, repo=args.repo)
     else:
         result = render_systemd_dropin(
             output=args.output,
