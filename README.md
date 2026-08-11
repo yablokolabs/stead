@@ -68,6 +68,19 @@ isolated profile, renders new-host paths, installs the user systemd service and
 credential-enforcing drop-in, persists custom private-state/Hermes paths across
 service restarts, and migrates the database.
 
+Web search is off until you turn it on. It needs a local SearXNG container, so
+the account running these scripts must be able to reach the Docker socket —
+`setup-searxng.sh` and `verify.sh` both invoke `docker` directly:
+
+```bash
+sudo usermod -aG docker "$USER"      # effectively root on this host — see SECURITY.md
+./scripts/setup-searxng.sh --start   # pinned digest, bound to 127.0.0.1 only
+echo 'SEARXNG_URL=http://127.0.0.1:8080' >> ~/.stead-demo/.env
+```
+
+Leave `SEARXNG_URL` unset and Stead has no web tools at all, and says so when
+asked. `TROUBLESHOOTING.md` lists the four separate causes of that sentence.
+
 For an old-VM to new-AWS migration, export private state first and pass the
 bundle to bootstrap:
 
