@@ -117,6 +117,52 @@ Nothing in this project writes to `~/.hermes` outside `profiles/stead-kerstin-de
 If Polaris looks wrong, stop and investigate before changing anything — do not
 "fix" it from here.
 
+## Stead says it cannot search the web
+
+Four independent things each produce that same sentence, and the first three
+leave no error anywhere — the tool is simply absent, so Stead correctly reports
+having no search capability. Work down the list; `./scripts/verify.sh` covers
+all four.
+
+**1. `SEARXNG_URL` is unset.** Hermes drops `web_search` and `web_extract`
+whenever no backend resolves. This is the state the repository ships in.
+
+```bash
+./scripts/check-secrets.sh | grep SEARXNG    # "absent — web search off"
+```
+
+Set `SEARXNG_URL=http://127.0.0.1:8080` in `$STEAD_DEMO_HOME/.env` and restart.
+
+**2. The toolset does not include `web`, because the profile was rendered
+before the URL existed.** `render_profile_config` adds `web` to
+`platform_toolsets` only when it can read `SEARXNG_URL` from the env file, so a
+profile rendered while that was unset is missing the toolset — and a missing
+toolset gates the tool away even after the backend starts resolving perfectly.
+This is the one that wastes an afternoon: the container is healthy, the URL is
+right, `curl` returns results, and Stead still says no.
+
+```bash
+grep -A6 platform_toolsets ~/.hermes/profiles/stead-kerstin-demo/config.yaml
+```
+
+Both `cli` and `telegram` must list `web`. **Order matters:** set `SEARXNG_URL`
+first, then re-run `./scripts/setup.sh`. Re-running it while the variable is
+still unset rewrites the same toolset-free config and changes nothing.
+
+**3. Your user cannot reach the Docker socket.** `setup-searxng.sh` and
+`verify.sh` both call `docker` directly, so a `permission denied ... docker.sock`
+makes the container unmanageable and unverifiable even when it is running.
+
+```bash
+id -nG | tr ' ' '\n' | grep -qx docker && echo ok || sudo usermod -aG docker "$USER"
+```
+
+Membership applies at next login; `sg docker -c '<command>'` works in the
+current shell. Note that this group is effectively root on the host — see
+`SECURITY.md`.
+
+**4. The container is not running.** See the next section.
+
 ## SearXNG refuses to start an existing container
 
 `setup-searxng.sh --start` fails closed if `stead-searxng` does not exactly
