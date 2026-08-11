@@ -12,14 +12,59 @@ Kerstin
                  ├─ MCP: stead (stdio)
                  │    └─ stead_mcp.server → stead_mcp.store
                  │         └─ ~/.stead-demo/stead.sqlite   (mode 600)
+                 ├─ plugin: stead_voice
+                 │    ├─ STT  sarvam  → MCP: sarvam (stdio)               ──→ out
+                 │    └─ TTS  sarvam  (registered, not selected)
                  ├─ model: application API key from ~/.stead-demo/.env   ──→ out
+                 ├─ TTS: Hermes built-in `edge`, en-GB-RyanNeural        ──→ out
                  └─ web: SearXNG on 127.0.0.1                            ──→ out
                       └─ upstream search engines
 ```
 
-Two edges leave this machine: the model API, and web search. Everything else is
-local. The SearXNG hop is local, but SearXNG is a proxy — the query itself
-reaches upstream engines. See `SECURITY.md`.
+Four edges leave this machine: the model API, web search, and — only when a
+voice note is involved — Sarvam and Microsoft's Edge voice endpoint. Everything
+else is local. The SearXNG hop is local, but SearXNG is a proxy — the query
+itself reaches upstream engines. See `SECURITY.md`.
+
+## Voice is an input modality, not a second agent
+
+A Telegram voice note is transcribed and handed to the same turn a typed
+message would have produced. Identity, household context, memory, tools and the
+approval rules are therefore shared by construction rather than by being kept in
+sync — nothing in `stead_voice/` knows what a calendar or a reminder is, and a
+spoken "cancel the dentist" meets the same confirmation gate a typed one does.
+
+```
+voice note ─→ Sarvam STT ─→ transcript ─┐
+                                        ├─→ the ordinary Stead turn ─→ text ─→ Edge TTS ─→ voice note
+typed message ──────────────────────────┘                                └─→ text (typed input)
+```
+
+Both legs are Hermes provider interfaces (`stt.provider`, `tts.provider`), so a
+different engine — including the realtime streaming path Stead will need as a
+mobile app — is a provider swap, not a change to Stead.
+
+## Stead hears in one voice and speaks in another
+
+Sarvam transcribes; Edge speaks. That split is not aesthetic. Sarvam's Bulbul
+model supports eleven Indic locales, and its English is `en-IN` — Sarvam
+confirmed by email on 2026-08-11 that no British-accent voice exists in their
+catalogue and that no accent parameter would produce one. Stead is a British
+household's assistant, so the spoken half uses Hermes' built-in `edge` provider,
+where `en-GB-RyanNeural` is a genuine British male voice.
+
+The Sarvam TTS provider is written, tested and registered anyway. Switching is
+`tts.provider: sarvam`, and the default speaker is already `ratan` — the voice
+Sarvam named. The cost of keeping it is one unused registration; the cost of
+not having it would be rediscovering the API's shape later.
+
+Two things worth knowing about the Edge voice. It needs no key or account, but
+it is the endpoint Edge's Read Aloud feature uses, reached through a client
+token baked into the `edge-tts` library — not a supported commercial API with an
+SLA. It is right for a private preview and wrong for a shipped product; a mobile
+Stead should move to a licensed voice (Azure Speech carries the same
+`en-GB-Ryan`). Sarvam's own TTS is unaffected by that concern and stays a
+one-line fallback.
 
 ## Why a Hermes profile
 

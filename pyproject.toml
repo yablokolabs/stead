@@ -18,10 +18,15 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["stead_mcp"]
+packages = ["stead_mcp", "stead_voice"]
 
 [tool.setuptools.package-data]
 stead_mcp = ["schema.sql"]
+stead_voice = ["plugin.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "integration: reaches the real Sarvam API; needs SARVAM_API_KEY and network",
+]
+addopts = "-m 'not integration'"

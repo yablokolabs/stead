@@ -145,6 +145,52 @@ the agent correctly reports having no search capability.
 
 **Searched claims are not household facts.** See **Fact provenance**.
 
+## Voice
+
+Stead can be spoken to. This is the most sensitive egress in the system: not a
+query about the household but the recorded voices of the people in it, and it is
+worth stating plainly rather than folding into "the model API".
+
+**Two vendors, only on a voice turn.** Inbound audio goes to Sarvam for
+transcription; the reply is synthesized by Microsoft's Edge voice endpoint. A
+typed conversation reaches neither. Nothing about voice changes what Stead knows
+or is allowed to do — a spoken instruction becomes an ordinary turn and meets the
+same approval gates, because `stead_voice/` transcribes and nothing else.
+
+**Sarvam is an account relationship, unlike SearXNG.** Requests carry
+`SARVAM_API_KEY`, so Sarvam can associate household audio with the key holder.
+This is the opposite of the web-search posture, where the whole point was to
+avoid a vendor tie. Anyone told "her voice is not linked to an account" would be
+told wrongly. The key is Stead-owned, read only from `$STEAD_DEMO_HOME/.env`,
+and the launcher scrubs any ambient `SARVAM_API_KEY` before that file is read,
+so a key belonging to Polaris or a shell cannot be used by mistake.
+
+**Microsoft is not an account relationship, and not a supported one either.**
+The Edge voice needs no key: `edge-tts` reaches the endpoint behind Edge's Read
+Aloud feature using a client token compiled into the library. Only Stead's reply
+text is sent, never household audio or the user's identity. It is also not a
+licensed API — no SLA, no terms covering production use, and Microsoft may
+change or rate-limit it without notice. Acceptable for a private preview;
+replace it with a licensed voice before Stead ships to anyone.
+
+**Recordings are not kept indefinitely, but they are kept.** Hermes caches each
+inbound voice note under `<profile>/cache/audio/` and prunes that directory
+hourly, deleting anything older than 24 hours
+(`cleanup_audio_cache`, `gateway/platforms/base.py`). So a recording of a
+household member exists on disk for up to a day. Synthesis is stricter: the
+Sarvam TTS provider writes into a per-call directory it removes on every exit
+path, success or failure, so two people's audio never share a directory and
+nothing survives the turn.
+
+**Transcripts are household content.** They enter memory and session history on
+the same terms as typed messages. Speech events are logged with durations and
+character counts only — never the transcript itself.
+
+**Failure is quiet, not silent.** With no `SARVAM_API_KEY` the voice path
+reports itself unavailable and typed messages are unaffected. If synthesis
+fails after Stead has already answered, the answer is still delivered as text
+rather than discarded.
+
 ## Fact provenance
 
 `facts.source` is `'stated'` or `'web'`. Unlike `provenance`, which is free
