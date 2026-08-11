@@ -47,7 +47,7 @@ stead_voice/        speech providers, loaded by Hermes as a plugin
 identity/SOUL.md    who Stead is
 skills/             stead-household-chief-of-staff — the operating loop
 scripts/            bootstrap, setup, verify, backup/restore, reset, SearXNG
-tests/              167 tests — store, MCP, scheduler, credentials, migration
+tests/              168 tests — store, MCP, scheduler, credentials, migration
                     isolation, fact provenance, speech
 ```
 
@@ -84,6 +84,11 @@ echo 'SEARXNG_URL=http://127.0.0.1:8080' >> ~/.stead-demo/.env
 
 Leave `SEARXNG_URL` unset and Stead has no web tools at all, and says so when
 asked. `TROUBLESHOOTING.md` lists the four separate causes of that sentence.
+
+Reading a page is configured separately from searching, so that queries stay on
+the local proxy and only pages Stead actually opens reach a vendor. Add
+`FIRECRAWL_API_KEY` to `~/.stead-demo/.env` to enable it; without it, search
+still works and `web_extract` fails closed. See `SECURITY.md`.
 
 For an old-VM to new-AWS migration, export private state first and pass the
 bundle to bootstrap:
