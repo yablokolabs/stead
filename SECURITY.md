@@ -134,9 +134,25 @@ machine. What is avoided is a vendor relationship that could link a query to
 Kerstin's identity or to a paid account. Anyone who would otherwise be told
 "her data stays on the VM" must be told this instead.
 
-**Extraction is unavailable.** SearXNG reports `supports_extract() == False`
-and no other provider is configured, so `web_extract` fails closed. Stead can
-read search results; it cannot fetch an arbitrary page.
+**Extraction is a separate backend, and a separate boundary.** SearXNG reports
+`supports_extract() == False`, so page reading is configured independently as
+`web.extract_backend: firecrawl` and needs `FIRECRAWL_API_KEY` in
+`$STEAD_DEMO_HOME/.env`. Unset the key and `web_extract` fails closed again,
+leaving search intact.
+
+The split is the point. Queries are the sensitive half — they describe what the
+household wants to know — and they stay on the local proxy. Firecrawl sees only
+URLs Stead chose to open, never a query. Setting `web.backend: firecrawl`
+instead would hand it both, which is why the two are configured separately even
+though one value would be shorter.
+
+This is still a vendor relationship, unlike SearXNG: Firecrawl can associate the
+pages Stead opens with the key holder. Anyone told "no search vendor sees
+anything" would be told wrongly — the accurate statement is that no vendor sees
+her queries, and one vendor sees the pages that were worth opening. The skill
+forbids opening a link that is itself household detail, such as a personalised
+school portal or a patient record, but that is a behavioural rule and not an
+enforced boundary.
 
 **Availability is gated at the registry.** `check_web_api_key()` in Hermes
 drops both web tools whenever no backend resolves. With `SEARXNG_URL` unset,

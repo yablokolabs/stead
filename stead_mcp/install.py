@@ -21,6 +21,10 @@ VOICE_PLUGIN = "stead_voice"
 STT_PROVIDER = "sarvam"
 BRITISH_MALE_VOICE = "en-GB-RyanNeural"
 
+# Page reading. Kept separate from `web.backend` so the search half stays on the
+# local proxy — see the Web search section of SECURITY.md.
+EXTRACT_BACKEND = "firecrawl"
+
 
 def _selected_env(path: Path, names: Iterable[str]) -> Dict[str, str]:
     """Read named, non-secret settings without evaluating the shell file."""
@@ -77,7 +81,10 @@ def render_profile_config(
             "cli": list(platform_toolsets),
             "telegram": list(platform_toolsets),
         },
-        "web": {"backend": "searxng"},
+        # Queries stay on the local SearXNG; only pages Stead explicitly opens
+        # reach a vendor. One backend for both would hand every household query
+        # to the extraction vendor as well.
+        "web": {"backend": "searxng", "extract_backend": EXTRACT_BACKEND},
         "mcp_servers": {
             "stead": {
                 "command": str(repo / ".venv" / "bin" / "python"),

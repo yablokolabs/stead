@@ -129,6 +129,34 @@ def test_profile_config_enables_web_only_with_a_searxng_url(tmp_path: Path) -> N
     assert "web" in config["platform_toolsets"]["telegram"]
 
 
+def test_rendered_profile_keeps_queries_off_the_extraction_vendor(tmp_path: Path) -> None:
+    """Search and page-reading deliberately use different backends.
+
+    Queries are the sensitive half — they describe what the household wants —
+    and they stay on the local SearXNG. Extraction needs a vendor account, so
+    it is scoped to `extract_backend`, where it sees only URLs Stead chose to
+    open. Collapsing the two onto one backend would hand every query to that
+    vendor, which is what `web.backend` alone would do.
+    """
+    from stead_mcp.install import render_profile_config
+
+    repo = tmp_path / "checkout"
+    demo = tmp_path / "private"
+    (repo / ".venv" / "bin").mkdir(parents=True)
+    demo.mkdir()
+    env_file = demo / ".env"
+    env_file.write_text("STEAD_MODEL_PROVIDER=gemini\nSTEAD_MODEL_NAME=gemini-test\n")
+    env_file.chmod(0o600)
+
+    web = yaml.safe_load(render_profile_config(
+        profile_home=tmp_path / "profile", repo=repo, demo_home=demo, env_file=env_file,
+    ).read_text())["web"]
+
+    assert web["backend"] == "searxng"
+    assert web["extract_backend"]
+    assert web["extract_backend"] != web["backend"]
+
+
 def test_rendered_profile_config_makes_stead_answer_voice_notes(tmp_path: Path) -> None:
     """Voice survives a re-run of setup.sh.
 
