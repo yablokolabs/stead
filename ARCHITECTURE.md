@@ -66,6 +66,14 @@ Stead should move to a licensed voice (Azure Speech carries the same
 `en-GB-Ryan`). Sarvam's own TTS is unaffected by that concern and stays a
 one-line fallback.
 
+**The web MVP does not yet honour any of this.** Its push-to-talk path runs on
+n8n, which transcribes with OpenAI Whisper and speaks with `tts-1` in the voice
+`alloy` — not British, and a third speech vendor. That divergence was accepted
+to get a demo working, not decided; `tts-1` has no `en-GB` male voice, so
+closing it means pointing one n8n node at Azure Speech. Until then the two
+halves of Stead sound like different products, and household audio reaches a
+vendor `SECURITY.md` does not list. See `docs/CLOUDFLARE_MVP.md`.
+
 ## Why a Hermes profile
 
 A named Hermes profile is a full `HERMES_HOME`. `~/.hermes/profiles/stead-kerstin-demo/`

@@ -30,6 +30,8 @@
     // would let any site drive a signed-in user's Stead.
     "ALLOWED_ORIGIN": "https://stead-preview.pages.dev",
 
-    "N8N_TIMEOUT_MS": "60000"
+    // A spoken turn is three model calls end to end — transcribe, agent,
+    // synthesise — so it needs more headroom than a typed one.
+    "N8N_TIMEOUT_MS": "90000"
   }
 }
