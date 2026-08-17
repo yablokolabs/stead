@@ -259,11 +259,12 @@ const steadAgent = node({
   output: [{ output: 'Nothing in the diary tomorrow.' }],
 });
 
-/** Re-reads the request, since after the merge `$json` is the agent's output. */
+/** Whether to include a transcript. Re-reads the request, since after the
+ *  merge `$json` is the agent's output rather than the original fields. */
 const wasSpoken = ifElse({
   version: 2.2,
   config: {
-    name: 'Reply Aloud?',
+    name: 'Spoken Turn?',
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
@@ -278,45 +279,34 @@ const wasSpoken = ifElse({
   },
 });
 
-/** Labels its output `audio/mp3`, which is not the registered MP3 type. The
- *  gateway's allowlist must contain that exact string or replies are dropped. */
-const speak = node({
-  type: '@n8n/n8n-nodes-langchain.openAi',
-  version: 2.3,
+/**
+ * No server-side text-to-speech.
+ *
+ * `tts-1` cost about 3s per spoken turn plus a base64 payload a third larger
+ * than the audio itself, and it could not start playing until the whole file
+ * had arrived. The browser's own speechSynthesis is instant, free, and honours
+ * `lang: en-GB` — which gets closer to the British voice ARCHITECTURE.md argues
+ * for than `alloy` ever did. The voice branch now returns text only.
+ */
+const voiceReply = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
   config: {
-    name: 'Generate Speech',
+    name: 'Voice Reply',
     parameters: {
-      resource: 'audio',
-      operation: 'generate',
-      model: 'tts-1',
-      input: expr('{{ $json.output }}'),
-      voice: 'alloy',
-      options: { response_format: 'mp3', binaryPropertyOutput: 'data' },
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [
+          { id: 'reply', name: 'reply', type: 'string', value: expr('{{ $json.output }}') },
+          { id: 'transcript', name: 'transcript', type: 'string', value: expr('{{ $(\'Transcribe Voice Note\').item.json.text }}') },
+        ],
+      },
+      options: {},
     },
-    credentials: { openAiApi: newCredential('OpenAI') },
     position: [1760, 180],
   },
-  output: [{ output: 'Nothing in the diary tomorrow.' }],
-});
-
-/**
- * `binary.data.data` is NOT the payload when n8n stores binary on the
- * filesystem — it is the storage backend id, and this instance returned the
- * literal string "filesystem-v2" to the browser. Always use the helper.
- */
-const encodeReply = node({
-  type: 'n8n-nodes-base.code',
-  version: 2,
-  config: {
-    name: 'Encode Spoken Reply',
-    parameters: {
-      mode: 'runOnceForAllItems',
-      jsCode:
-        "const item = $input.first();\nconst meta = item.binary && item.binary.data ? item.binary.data : null;\n\n// binary.data.data is NOT the payload when n8n stores binary on the\n// filesystem — it is the storage backend id. Always go through the helper.\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nreturn [{ json: {\n  reply: $(\"Stead Web Agent\").first().json.output,\n  transcript: $(\"Transcribe Voice Note\").first().json.text,\n  audio_base64: buffer.toString('base64'),\n  audio_mime: (meta && meta.mimeType) || 'audio/mpeg'\n} }];",
-    },
-    position: [1980, 180],
-  },
-  output: [{ reply: 'Nothing in the diary tomorrow.', transcript: 'What is happening tomorrow?', audio_base64: 'SUQzB', audio_mime: 'audio/mp3' }],
+  output: [{ reply: 'Nothing in the diary tomorrow.', transcript: 'What is happening tomorrow?' }],
 });
 
 /** `firstIncomingItem`, not `allEntries` — the latter is not a valid option
@@ -325,7 +315,7 @@ const respondSpoken = node({
   type: 'n8n-nodes-base.respondToWebhook',
   version: 1.1,
   config: { name: 'Respond With Voice', parameters: { respondWith: 'firstIncomingItem', options: {} }, position: [2200, 180] },
-  output: [{ reply: 'Nothing in the diary tomorrow.', transcript: 'What is happening tomorrow?', audio_base64: 'SUQzB', audio_mime: 'audio/mp3' }],
+  output: [{ reply: 'Nothing in the diary tomorrow.', transcript: 'What is happening tomorrow?' }],
 });
 
 const textReply = node({
@@ -362,5 +352,5 @@ export default workflow('stead-web', 'Stead Web')
   .to(normalize)
   .to(isAudio.onTrue(decodeAudio.to(transcribe).to(voicePrompt).to(steadAgent)).onFalse(textPrompt.to(steadAgent)))
   .add(steadAgent)
-  .to(wasSpoken.onTrue(speak.to(encodeReply).to(respondSpoken)).onFalse(textReply.to(respondText)))
+  .to(wasSpoken.onTrue(voiceReply.to(respondSpoken)).onFalse(textReply.to(respondText)))
   .add(identityNote);

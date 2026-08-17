@@ -420,14 +420,25 @@ and never was. `searchContextSize` is the only knob.
 A turn needing no search costs ~6.3 s, which is `gpt-5-mini`'s own latency.
 That is the floor without changing model.
 
+**Server-side text-to-speech has since been removed.** `tts-1` cost ~3 s per
+spoken turn plus a base64 payload a third larger than the audio, and nothing
+could play until the whole file arrived. The browser's own `speechSynthesis`
+starts immediately and costs nothing. Measured after:
+
+| Turn | Before any tuning | Now |
+|---|---:|---:|
+| Spoken | 21.8 s | **5.0 s** |
+| Typed | ~17.5 s (searching) | **2.9 s** |
+
+It also sounds *more* correct, not less: `speechSynthesis` honours
+`lang: en-GB`, so most devices pick a British voice — closer to what
+`ARCHITECTURE.md` argues for than `alloy` was.
+
 Remaining levers, largest first:
 
-- **Replace `tts-1` with the browser's `speechSynthesis`** — removes ~3 s and
-  the base64 round trip, and starts speaking immediately. Costs the consistent
-  voice.
-- **Turn web search off** — removes the remaining search cost entirely, at the
-  cost of a genuinely useful capability.
-- **A faster model** — moves the ~6 s floor.
+- **Turn web search off** — removes the remaining search cost, at the cost of a
+  genuinely useful capability.
+- **A faster model** — moves the ~6 s floor that is `gpt-5-mini` itself.
 - **Show the transcript as soon as it exists** — changes nothing measurable,
   changes the experience a lot. Needs streaming or two round trips, and n8n's
   Respond to Webhook is all-or-nothing.

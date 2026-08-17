@@ -112,12 +112,16 @@ const SILENCE =
 let player: HTMLAudioElement | null = null;
 let playing: string | null = null;
 
+function canSpeak(): boolean {
+  return typeof window !== 'undefined' && 'speechSynthesis' in window;
+}
+
 /**
- * Spend the user's tap on unlocking playback.
+ * Spend the user's tap on unlocking both ways of making sound.
  *
- * iOS only permits `play()` inside a gesture. Playing silence on the same
- * element during the tap that starts recording leaves that element allowed to
- * play again later, which is when the reply actually arrives.
+ * iOS permits neither `play()` nor `speak()` outside a gesture, and the reply
+ * arrives long after this handler returns. Playing silence and speaking a
+ * space during the tap leaves both engines allowed for the rest of the session.
  */
 export function primePlayback(): void {
   player ??= new Audio();
@@ -125,8 +129,49 @@ export function primePlayback(): void {
   void player.play().catch(() => {
     // A browser that refuses even this still shows the reply as text.
   });
+
+  if (canSpeak()) {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(' '));
+  }
 }
 
+/**
+ * Prefer a British voice.
+ *
+ * `ARCHITECTURE.md` argues at length that Stead serves a British household and
+ * should sound like it. The device's own voices get closer to that than the
+ * server-side `alloy` ever did, and cost nothing.
+ */
+function preferredVoice(): SpeechSynthesisVoice | undefined {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find((v) => v.lang === 'en-GB') ?? voices.find((v) => v.lang.startsWith('en'));
+}
+
+/**
+ * Speak a reply with the device's own synthesiser.
+ *
+ * This replaced server-side text-to-speech: it removed about three seconds
+ * from every spoken turn and a base64 payload a third larger than the audio,
+ * and it starts talking immediately rather than after a whole file arrives.
+ */
+export function speak(text: string): void {
+  if (!canSpeak() || text.trim().length === 0) return;
+
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-GB';
+  const voice = preferredVoice();
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
+}
+
+/** Stop mid-sentence — for when the user starts talking again. */
+export function stopSpeaking(): void {
+  if (canSpeak()) window.speechSynthesis.cancel();
+}
+
+/** Only used if the agent ever sends audio itself; the browser speaks now. */
 export function playReply(audio: Blob): void {
   player ??= new Audio();
   if (playing) URL.revokeObjectURL(playing);

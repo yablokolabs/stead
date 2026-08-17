@@ -66,13 +66,16 @@ Stead should move to a licensed voice (Azure Speech carries the same
 `en-GB-Ryan`). Sarvam's own TTS is unaffected by that concern and stays a
 one-line fallback.
 
-**The web MVP does not yet honour any of this.** Its push-to-talk path runs on
-n8n, which transcribes with OpenAI Whisper and speaks with `tts-1` in the voice
-`alloy` — not British, and a third speech vendor. That divergence was accepted
-to get a demo working, not decided; `tts-1` has no `en-GB` male voice, so
-closing it means pointing one n8n node at Azure Speech. Until then the two
-halves of Stead sound like different products, and household audio reaches a
-vendor `SECURITY.md` does not list. See `docs/CLOUDFLARE_MVP.md`.
+**The web MVP reaches the same conclusion by a different route.** Its
+push-to-talk path transcribes with OpenAI Whisper in n8n, but synthesis happens
+in the browser: `speechSynthesis` with `lang: en-GB`, so the device picks a
+British voice and no audio crosses the network. It briefly used OpenAI `tts-1`
+with the voice `alloy`, which was neither British nor free; moving synthesis to
+the browser removed about three seconds per turn and the divergence at once.
+
+What has not been closed: transcription is OpenAI rather than Sarvam, so
+household audio still reaches a vendor `SECURITY.md` does not list among its
+egress edges. See `docs/CLOUDFLARE_MVP.md`.
 
 ## Why a Hermes profile
 

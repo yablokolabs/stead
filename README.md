@@ -20,7 +20,7 @@ Stead has two, and they currently coexist rather than one replacing the other.
 | Agent | Hermes profile `stead-kerstin-demo` | n8n Cloud |
 | State | local SQLite, mode 600 | Supabase |
 | Identity | allow-listed Telegram IDs | Supabase Auth |
-| Voice | yes — Sarvam in, Edge out (British) | push to talk — Whisper in, OpenAI `alloy` out |
+| Voice | yes — Sarvam in, Edge out (British) | push to talk — Whisper in, the device's own voice out (`en-GB`) |
 | Status | working; this is what gets demonstrated | text and voice both working |
 
 Everything below this section describes the **private preview**. It is the

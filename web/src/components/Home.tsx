@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { askStead, speakToStead, SteadApiError, type SteadReply } from '../lib/api';
-import { MicrophoneDenied, playReply, primePlayback, VoiceRecorder } from '../lib/recorder';
+import {
+  MicrophoneDenied,
+  playReply,
+  primePlayback,
+  speak,
+  stopSpeaking,
+  VoiceRecorder,
+} from '../lib/recorder';
 
 type Phase = 'idle' | 'recording' | 'thinking';
 
@@ -29,7 +36,13 @@ export function Home({ apiUrl }: { apiUrl: string }) {
 
   // Leaving the screen mid-recording must drop the microphone, or the browser
   // goes on showing a household it is being listened to.
-  useEffect(() => () => recorder.cancel(), [recorder]);
+  useEffect(
+    () => () => {
+      recorder.cancel();
+      stopSpeaking();
+    },
+    [recorder],
+  );
 
   function report(cause: unknown) {
     const failure = cause instanceof SteadApiError ? cause : new SteadApiError('unknown', 0);
@@ -51,6 +64,7 @@ export function Home({ apiUrl }: { apiUrl: string }) {
       const result = await send();
       setTurn({ transcript: result.transcript, reply: result.reply });
       if (result.audio) playReply(result.audio);
+      else speak(result.reply);
       return true;
     } catch (cause) {
       report(cause);
@@ -88,6 +102,7 @@ export function Home({ apiUrl }: { apiUrl: string }) {
 
     // Must happen inside the tap: iOS only grants playback from a gesture, and
     // the reply arrives long after this handler returns.
+    stopSpeaking();
     primePlayback();
     setError(null);
     try {
