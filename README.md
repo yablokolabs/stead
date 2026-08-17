@@ -9,6 +9,29 @@ quiet when there is nothing worth saying.
 
 This is an early private preview, not a finished product.
 
+## Two front doors
+
+Stead has two, and they currently coexist rather than one replacing the other.
+
+| | Private preview | Web MVP |
+|---|---|---|
+| Reached by | Telegram | browser, installable to a home screen |
+| Runs on | this VM, `systemd --user` | Cloudflare Pages + Cloudflare Worker |
+| Agent | Hermes profile `stead-kerstin-demo` | n8n Cloud |
+| State | local SQLite, mode 600 | Supabase |
+| Identity | allow-listed Telegram IDs | Supabase Auth |
+| Voice | yes — Sarvam in, Edge out | not yet |
+| Status | working; this is what gets demonstrated | connectivity only |
+
+Everything below this section describes the **private preview**. It is the
+working product and is unaffected by the web path.
+
+The web MVP is a parallel migration route, added rather than migrated: it shares
+no code, no database, no credential and no service with the Telegram preview, so
+neither can break the other. Nothing in `web/` or `worker/` reads Hermes, the
+SQLite store, or `~/.stead-demo`. It is described separately in
+`docs/CLOUDFLARE_MVP.md`.
+
 ## Isolation
 
 Stead runs in its own Hermes profile with its own service. The existing Polaris
@@ -49,6 +72,9 @@ skills/             stead-household-chief-of-staff — the operating loop
 scripts/            bootstrap, setup, verify, backup/restore, reset, SearXNG
 tests/              168 tests — store, MCP, scheduler, credentials, migration
                     isolation, fact provenance, speech
+
+web/                the web MVP's frontend — Cloudflare Pages   ┐ separate stack,
+worker/             the web MVP's API gateway — Cloudflare Worker ┘ see docs/
 ```
 
 State lives in `$STEAD_DEMO_HOME` (default `~/.stead-demo`), mode 700, outside
@@ -184,3 +210,4 @@ any other path. Deletes demo data only — never the profile or service.
 - `TROUBLESHOOTING.md` — when something misbehaves
 - `MIGRATION.md` — secure backup and clean AWS restore
 - `HANDOFF.md` — the checklist before showing Kerstin
+- `docs/CLOUDFLARE_MVP.md` — the web MVP: Pages, Worker, Supabase Auth, n8n

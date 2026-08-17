@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "stead-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-11",
+  "observability": { "enabled": true },
+
+  // Pinned rather than left on wrangler's 8787 default, which the `headroom`
+  // Sarvam proxy already holds on the preview VM. An explicit port also means
+  // VITE_STEAD_API_URL cannot drift from wherever `wrangler dev` happened to land.
+  "dev": { "port": 8788 },
+
+  // One environment on purpose. A second `env` block would mean two deployed
+  // Workers and a `--env` flag that is easy to forget, so these values are the
+  // PRODUCTION ones; `wrangler dev` overrides them from .dev.vars, which takes
+  // precedence locally and is gitignored.
+  //
+  // Secrets are not declared here — Wrangler has no field for the names of
+  // required secrets, and writing the values here would commit them. They are
+  // documented in .dev.vars.example and docs/CLOUDFLARE_MVP.md:
+  //
+  //   npx wrangler secret put N8N_WEBHOOK_URL
+  //   npx wrangler secret put N8N_WEBHOOK_SECRET
+  "vars": {
+    "SUPABASE_URL": "https://lzzrpzdjzybpvykspxiy.supabase.co",
+
+    // CHANGE THIS before the first production deploy: the exact origin Pages
+    // serves the app from. The *.pages.dev origin at first, then the custom
+    // domain. Wrong value and every browser request is refused; a wildcard
+    // would let any site drive a signed-in user's Stead.
+    "ALLOWED_ORIGIN": "https://stead-preview.pages.dev",
+
+    "N8N_TIMEOUT_MS": "60000"
+  }
+}
