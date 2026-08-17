@@ -341,6 +341,48 @@ The workflow-creation API also did not persist `responsesApiEnabled` from the
 initial create; it had to be set again afterwards. Verify with
 `validate_workflow` — it warns when `builtInTools` is present without it.
 
+### Your OpenAI calls do not go to OpenAI
+
+The `n8n free OpenAI API credits` credential is **managed**, and every request
+made with it is routed through n8n's own shared proxy:
+
+```
+baseURL: https://ai-assistant.n8n.io/v1/ai-credits/proxy/v1
+```
+
+This one fact explains three symptoms that look unrelated:
+
+- **Wild latency variance.** Identical requests measured 2.2 s, 9.1 s and
+  14.3 s. That is a shared proxy under load, not OpenAI being slow.
+- **Intermittent `500 The server had an error processing your request`**,
+  surfacing to the browser as `agent_unavailable`.
+- **The transcription node cannot be replaced.** Swapping it for a direct HTTP
+  Request to `api.openai.com` fails with `401 Your authentication token is not
+  from a valid issuer` — the managed credential issues an n8n proxy token,
+  which the real API rejects. That swap is the only way to reach a faster
+  transcription model or to pass Whisper a `prompt`.
+
+**A real OpenAI API key fixes all three**, and is the single highest-value
+change left. Create one, add it as a normal `openAiApi` credential, and repoint
+`Transcribe Voice Note`, `Stead Web Model` and any future speech node at it.
+
+### The transcribe node has no `prompt` and no model choice
+
+`@n8n/n8n-nodes-langchain.openAi` with `resource: audio, operation: transcribe`
+exposes exactly two options:
+
+```typescript
+options?: { language?: string; temperature?: number };
+```
+
+A `prompt` set on it — to stop Whisper hearing "Hey Stead" as "He's dead" — is
+silently discarded, and `validate_workflow` does not object. Always read a
+node's type definition with `get_node_types` before assuming a parameter
+exists; the API accepting a value is not evidence the node uses it.
+
+The name is therefore still mis-transcribed ("Stent"), and stays that way until
+the direct HTTP call above becomes possible.
+
 ### `wrangler login` times out on a headless VM
 
 The default OAuth flow starts a callback listener on `localhost:8976` of the
@@ -434,14 +476,45 @@ It also sounds *more* correct, not less: `speechSynthesis` honours
 `lang: en-GB`, so most devices pick a British voice — closer to what
 `ARCHITECTURE.md` argues for than `alloy` was.
 
+`reasoningEffort` was then found to be unset, and therefore `medium`.
+`gpt-5-mini` is a reasoning model, so it was thinking about "what day is
+tomorrow". Setting it to `low` roughly halved the agent again:
+
+| Turn | Original | Now |
+|---|---:|---:|
+| Spoken | 21.8 s | **~2.7–3.8 s** |
+| Typed | ~17.5 s | **~2.2 s** |
+
+Where the remaining time goes, measured separately:
+
+| | Time | Share |
+|---|---:|---:|
+| OpenAI (via n8n's proxy) | ~2.2 s | ~85% |
+| Network to/from n8n Cloud | ~0.3 s | 11% |
+| The Cloudflare Worker | **~0.05 s** | 2% |
+| n8n graph overhead | ~0.05 s | 2% |
+
+The gateway contributes one fiftieth of a turn. There is nothing left to
+remove from our own code.
+
+**Sub-second is not reachable with this architecture, and that is a design
+choice rather than a defect.** Whisper is a batch API: it cannot start until
+the recording is complete and then takes roughly 0.4× the audio duration, so a
+four-second clip costs ~1.8 s on its own. Getting under a second needs
+transcription while the user speaks, generation while the model thinks, and
+speech while the rest is still being written — and n8n is request/response,
+with `Respond to Webhook` returning once, at the end. Streaming is where the
+complexity lives, and this architecture deliberately did not buy it.
+
 Remaining levers, largest first:
 
+- **A real OpenAI key** — removes the proxy hop, its variance and its 500s, and
+  unblocks a faster transcription model. See the field note.
 - **Turn web search off** — removes the remaining search cost, at the cost of a
   genuinely useful capability.
-- **A faster model** — moves the ~6 s floor that is `gpt-5-mini` itself.
 - **Show the transcript as soon as it exists** — changes nothing measurable,
-  changes the experience a lot. Needs streaming or two round trips, and n8n's
-  Respond to Webhook is all-or-nothing.
+  changes the experience a lot. Needs streaming or two round trips.
+- **Take voice out of n8n entirely** — ~1–1.5 s, and a real project.
 
 ## Verifying the whole path
 
