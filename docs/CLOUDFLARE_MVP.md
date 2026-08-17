@@ -285,16 +285,20 @@ Success is `200`:
 ```json
 {
   "reply": "Nothing in the diary tomorrow.",
-  "transcript": "Anything on tomorrow?",
-  "audio_base64": "…",
-  "audio_mime": "audio/mpeg"
+  "transcript": "Anything on tomorrow?"
 }
 ```
 
-`transcript` and the audio pair appear only when the agent returned them. The
-media type is re-checked against the same allowlist on the way out: it becomes
-a `Blob` type in the browser, and upstream is not the authority on what this
-gateway hands a household's device.
+**The reply is spoken by the browser, not the server.** `speechSynthesis`
+starts immediately, costs nothing, and honours `lang: en-GB`. Server-side
+`tts-1` was removed: it added ~3 s per turn and a base64 payload a third larger
+than the audio, and nothing could play until the whole file had arrived.
+
+The gateway still *accepts* `audio_base64` / `audio_mime` in case the agent
+sends audio one day, and the frontend prefers it when present. The media type
+is re-checked against the same allowlist on the way out: it becomes a `Blob`
+type in the browser, and upstream is not the authority on what this gateway
+hands a household's device.
 
 ## The n8n contract
 
@@ -393,24 +397,31 @@ Two traps found while fixing this, both worth knowing:
   to OpenAI. The prompt tells the agent not to put personal details in a query,
   which is a behavioural rule, not an enforced boundary.
 
-### Speech runs on OpenAI, not on the stack ARCHITECTURE.md describes
+### Where speech happens
 
-Worth stating plainly, because the two halves of Stead now sound different.
+Three different places, for three different reasons.
 
-`ARCHITECTURE.md` documents a deliberate choice for the Telegram preview:
-Sarvam for transcription, Edge `en-GB-RyanNeural` for synthesis, chosen because
-Sarvam has no British voice and Stead serves a British household. The n8n path
-predates that decision reaching it and uses OpenAI Whisper plus `tts-1` with the
-voice `alloy`, which is not British.
+| | Telegram preview | Web MVP |
+|---|---|---|
+| Hears | Sarvam Saaras | OpenAI Whisper, in n8n |
+| Speaks | Edge `en-GB-RyanNeural` | the browser's own `speechSynthesis` |
 
-This was accepted for the first demo rather than fixed. `tts-1` has no `en-GB`
-male voice, so matching the documented choice means another vendor — Azure
-Speech carries the same `en-GB-Ryan`. Changing it is one node.
+`ARCHITECTURE.md` explains the Telegram choice at length: Sarvam has no British
+voice, and Stead serves a British household.
 
-Two consequences to record rather than discover later: household audio and
-household context now reach OpenAI, an egress vendor `SECURITY.md` does not
-list; and everything runs on the `n8n free OpenAI API credits` credential, which
-is a finite trial pool.
+The web MVP briefly used OpenAI `tts-1` with the voice `alloy` — not British,
+and a third speech vendor. Moving synthesis into the browser removed that
+divergence as a side effect of removing 3 s of latency: `speechSynthesis`
+honours `lang: en-GB`, so most devices choose a British voice, and no audio
+crosses the network at all.
+
+**Transcription is still OpenAI.** Household audio reaches a vendor
+`SECURITY.md` does not list among its egress edges, and it runs on the `n8n
+free OpenAI API credits` credential, which is a finite trial pool. Both are
+worth closing before real households.
+
+Whisper is primed with Stead's name — see the runbook's field note on "He's
+dead" for why that is not optional.
 
 ## Deployment
 

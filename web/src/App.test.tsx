@@ -220,6 +220,7 @@ describe('talking to Stead', () => {
   let trackStops: number;
   let play: ReturnType<typeof vi.fn>;
   let getUserMedia: ReturnType<typeof vi.fn>;
+  let spoken: string[];
 
   class FakeMediaRecorder {
     static isTypeSupported(type: string) {
@@ -275,6 +276,19 @@ describe('talking to Stead', () => {
     URL.revokeObjectURL = vi.fn();
     play = vi.fn().mockResolvedValue(undefined);
     HTMLMediaElement.prototype.play = play as unknown as HTMLMediaElement['play'];
+
+    spoken = [];
+    class FakeUtterance {
+      lang = '';
+      voice: unknown = null;
+      constructor(public text: string) {}
+    }
+    vi.stubGlobal('SpeechSynthesisUtterance', FakeUtterance);
+    vi.stubGlobal('speechSynthesis', {
+      cancel: vi.fn(),
+      speak: (u: { text: string }) => void spoken.push(u.text),
+      getVoices: () => [],
+    });
   });
 
   async function startTalking() {
@@ -311,6 +325,30 @@ describe('talking to Stead', () => {
 
     expect(await screen.findByText('Nothing in the diary tomorrow.')).toBeInTheDocument();
     expect(screen.getByText(/Anything on tomorrow\?/)).toBeInTheDocument();
+  });
+
+  /** The agent no longer synthesises; the device does, and it costs nothing. */
+  it('speaks the reply itself when the agent sends no audio', async () => {
+    stubGateway({ reply: 'Nothing in the diary tomorrow.', transcript: 'Anything on tomorrow?' });
+
+    const user = await startTalking();
+    await user.click(await screen.findByRole('button', { name: 'Stop and send' }));
+
+    await screen.findByText('Nothing in the diary tomorrow.');
+    // The priming space is spoken during the tap; the reply follows it.
+    expect(spoken).toContain('Nothing in the diary tomorrow.');
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('prefers the agent audio if it ever sends any', async () => {
+    stubGateway({ reply: 'Nothing tomorrow.', audio_base64: 'aGk=', audio_mime: 'audio/mpeg' });
+
+    const user = await startTalking();
+    await user.click(await screen.findByRole('button', { name: 'Stop and send' }));
+
+    await screen.findByText('Nothing tomorrow.');
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    expect(spoken).not.toContain('Nothing tomorrow.');
   });
 
   it('plays the spoken reply', async () => {
