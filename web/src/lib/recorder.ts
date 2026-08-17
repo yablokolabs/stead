@@ -148,17 +148,42 @@ export function primePlayback(): void {
  * `ARCHITECTURE.md` argues Stead serves a British household and should sound
  * like it, so `en-GB` outranks everything else.
  */
+/**
+ * `SpeechSynthesisVoice` has no gender field, so this is name matching and
+ * therefore imperfect. These are the British male voices the major platforms
+ * actually ship: Apple (Daniel, Arthur, Oliver), Chrome (Google UK English
+ * Male), Edge and Windows (Ryan, Thomas, George).
+ *
+ * `\bmale\b` deliberately does not match "Female" — no word boundary between
+ * "Fe" and "male" — but female names are checked first regardless.
+ */
+const BRITISH_MALE = /\b(daniel|arthur|oliver|george|ryan|thomas|brian|alfie|elliot|male)\b/i;
+const FEMALE = /\b(female|kate|serena|sonia|libby|hazel|martha|maisie|amy|emma|fiona|susan|karen)\b/i;
+
+/**
+ * Scored in tiers, and the order of the tiers is the point.
+ *
+ * `ARCHITECTURE.md` chose `en-GB-RyanNeural` — British and male — but the
+ * argument it makes at length is about the ACCENT: Stead serves a British
+ * household. So locale dominates absolutely, and gender only decides between
+ * voices that are already British. An earlier version scored these on one
+ * scale, which let an American male outrank a British female — exactly the
+ * substitution the architecture argues against.
+ */
 export function scoreVoice(voice: SpeechSynthesisVoice): number {
   let score: number;
-  if (voice.lang === 'en-GB') score = 100;
-  else if (voice.lang.startsWith('en')) score = 50;
+  if (voice.lang === 'en-GB') score = 1000;
+  else if (voice.lang.startsWith('en')) score = 0;
   else return -1;
+
+  if (FEMALE.test(voice.name)) score -= 100;
+  else if (BRITISH_MALE.test(voice.name)) score += 100;
 
   if (/natural|neural/i.test(voice.name)) score += 30;
   if (!voice.localService) score += 20;
   if (/google/i.test(voice.name)) score += 10;
-  // Named voices that are known to be poor on their platforms.
-  if (/daniel|compact|eloquence/i.test(voice.name)) score -= 15;
+  // Genuinely poor renderings, whatever the accent.
+  if (/compact|eloquence/i.test(voice.name)) score -= 25;
   return score;
 }
 

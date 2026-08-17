@@ -52,13 +52,12 @@ describe('pickVoice', () => {
     expect(pick?.name).toBe('Serena');
   });
 
-  /** The first en-GB entry is often the oldest and worst on the system. */
-  it('prefers a natural voice over the first British one in the list', () => {
+  it('prefers a natural voice among equals', () => {
     const pick = pickVoice([
-      v('Daniel', 'en-GB'),
+      v('Serena', 'en-GB'),
       v('Microsoft Ryan Online (Natural) - English (United Kingdom)', 'en-GB', false),
     ]);
-    expect(pick?.name).toContain('Natural');
+    expect(pick?.name).toContain('Ryan');
   });
 
   it('prefers a network voice over a local one of the same locale', () => {
@@ -66,12 +65,48 @@ describe('pickVoice', () => {
     expect(pick?.name).toBe('Cloud Brit');
   });
 
-  it('takes an American natural voice over a poor British one', () => {
-    const pick = pickVoice([
-      v('Daniel (Compact)', 'en-GB'),
-      v('Google US English Neural', 'en-US', false),
-    ]);
-    expect(pick?.name).toBe('Google US English Neural');
+  /**
+   * ARCHITECTURE.md chose en-GB-RyanNeural — British and male — deliberately.
+   * There is no gender field on a voice, so this is name matching.
+   */
+  describe('British and male, as the architecture asks for', () => {
+    it.each([
+      ['Apple', ['Kate', 'Daniel'], 'Daniel'],
+      ['Chrome', ['Google UK English Female', 'Google UK English Male'], 'Google UK English Male'],
+      ['Edge', ['Microsoft Sonia', 'Microsoft Ryan'], 'Microsoft Ryan'],
+      ['Windows', ['Hazel', 'George'], 'George'],
+    ])('picks the male British voice on %s', (_platform, names, expected) => {
+      expect(pickVoice(names.map((n) => v(n, 'en-GB')))?.name).toBe(expected);
+    });
+
+    /**
+     * The female-name list cannot be exhaustive. When a name is simply not
+     * recognised, a known male name still has to win — otherwise the pick is
+     * whichever the device happened to list first.
+     */
+    it('prefers a known male name over an unrecognised one', () => {
+      const pick = pickVoice([v('Aurelie', 'en-GB'), v('Arthur', 'en-GB')]);
+      expect(pick?.name).toBe('Arthur');
+    });
+
+    it('does not mistake "Female" for a male voice', () => {
+      const pick = pickVoice([v('Google UK English Female', 'en-GB'), v('Arthur', 'en-GB')]);
+      expect(pick?.name).toBe('Arthur');
+    });
+
+    it('still prefers British female over American male', () => {
+      const pick = pickVoice([v('Serena', 'en-GB'), v('Daniel', 'en-US')]);
+      expect(pick?.name).toBe('Serena');
+    });
+
+    it('takes a female voice rather than none when that is all there is', () => {
+      expect(pickVoice([v('Serena', 'en-GB')])?.name).toBe('Serena');
+    });
+
+    it('avoids the compact renderings whatever the gender', () => {
+      const pick = pickVoice([v('Daniel (Compact)', 'en-GB'), v('Oliver', 'en-GB')]);
+      expect(pick?.name).toBe('Oliver');
+    });
   });
 });
 
