@@ -26,7 +26,7 @@ Everything the web path depends on, as of 2026-08-17.
 | n8n instance | `yablokolabs.app.n8n.cloud` | n8n Cloud |
 | n8n workflow | `Stead Web`, id `7timLWnuspV2O1mb` | source of truth: `docs/n8n/stead-web.workflow.ts` |
 | Agent model | Google Gemini `models/gemini-3.1-flash-lite` | credential `Google Gemini(PaLM) Api account` |
-| Transcription | OpenAI `whisper-1` | credential `OpenAI account` — **needs account credit** |
+| Transcription | Sarvam `saarika:v2.5` | credential `Sarvam` (Header Auth, `api-subscription-key`) |
 | n8n webhook | `https://yablokolabs.app.n8n.cloud/webhook/stead-web` | |
 | Pages project | **not created yet** | |
 | Custom domain | **not configured** | |
@@ -407,6 +407,46 @@ It happened here because the OpenAI key was first saved as a Header Auth
 credential, attached to the webhook, then deleted. Repair it with
 `setNodeCredential` pointing at a credential that still exists; reads stay
 broken until you do, but writes still work.
+
+### Whisper invents words; Sarvam does not
+
+Given a 1.5-second 180 Hz sine tone with no speech in it whatsoever:
+
+| | Result | Time |
+|---|---|---|
+| Whisper | `"You"` | 1,851 ms |
+| Sarvam `saarika:v2.5` | `""` | 1,182 ms |
+
+Whisper hallucinating short filler on non-speech is well known, and it is worse
+than useless here: the agent receives a plausible word and answers it. Sarvam
+returning nothing is the correct behaviour, and it is faster.
+
+**But an empty transcript is its own hazard.** It reached the agent, which
+replied with an empty string. Silence, a muted microphone and tap-record-say-
+nothing all produce one. `Heard Anything?` now branches on it and answers "I
+didn't catch that. Try again?" rather than passing nothing to a model that will
+confidently fill the gap.
+
+If you swap transcription providers, check what the empty case does before
+checking the happy path.
+
+### The whole speech path can avoid OpenAI entirely
+
+After OpenAI failed twice, the working configuration is:
+
+```
+browser ──▶ Sarvam STT ──▶ Gemini agent ──▶ browser speechSynthesis
+```
+
+No OpenAI anywhere. Sarvam is a Header Auth credential (`api-subscription-key`)
+on an HTTP Request node; Gemini uses the `googlePalmApi` credential; speech is
+free and local to the device.
+
+Note the credential provenance: the Sarvam key currently in use came from
+`~/.hermes/.env`, which is **Polaris's** profile, not Stead's. `SECURITY.md`
+argues against exactly this — if Stead's traffic gets that key rate-limited,
+Polaris loses its voice. A second key from the same Sarvam account, owned by
+Stead, closes it at no cost.
 
 ### Gemini transcription does not work as a drop-in
 

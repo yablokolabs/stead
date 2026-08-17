@@ -141,29 +141,94 @@ const decodeAudio = node({
 });
 
 /**
- * `options` supports ONLY `language` and `temperature`.
+ * Sarvam, not OpenAI.
  *
- * There is no `prompt` and no model choice — it is whisper-1 or nothing. A
- * prompt set here to stop Whisper hearing "Hey Stead" as "He's dead" was
- * silently discarded, and `validate_workflow` did not object. Fixing the name
- * properly needs a direct HTTP call to the transcription API, which needs a
- * real OpenAI key; see the runbook's field note on the managed credential.
+ * OpenAI's transcription died twice — n8n's free credits ran out, then a real
+ * key on an unfunded account returned insufficient_quota. Sarvam is the vendor
+ * the Telegram preview already uses for speech, and it is faster here: 1,182 ms
+ * against Whisper's 1,851 ms on the same clip.
+ *
+ * It is also more honest. Given a sine tone with no speech in it, Whisper
+ * hallucinated the word "You"; Sarvam returned an empty transcript, which is
+ * what `Heard Anything?` below exists to handle.
+ *
+ * The field is `transcript`, not Whisper's `text`. Its English is en-IN — see
+ * ARCHITECTURE.md on why Stead has no British-accented recogniser.
+ *
+ * Auth is a Header Auth credential named `api-subscription-key`; the value
+ * cannot live here.
  */
 const transcribe = node({
-  type: '@n8n/n8n-nodes-langchain.openAi',
-  version: 2.3,
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.2,
   config: {
     name: 'Transcribe Voice Note',
     parameters: {
-      resource: 'audio',
-      operation: 'transcribe',
-      binaryPropertyName: 'data',
-      options: { language: 'en' },
+      method: 'POST',
+      url: 'https://api.sarvam.ai/speech-to-text',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      sendBody: true,
+      contentType: 'multipart-form-data',
+      bodyParameters: {
+        parameters: [
+          { parameterType: 'formBinaryData', name: 'file', inputDataFieldName: 'data' },
+          { name: 'model', value: 'saarika:v2.5' },
+          { name: 'language_code', value: 'en-IN' },
+        ],
+      },
+      options: { timeout: 60000, response: { response: { responseFormat: 'json' } } },
     },
-    credentials: { openAiApi: newCredential('OpenAI') },
+    credentials: { httpHeaderAuth: newCredential('Sarvam') },
     position: [880, 180],
   },
-  output: [{ text: 'What is happening tomorrow?' }],
+  output: [{ request_id: '20260817_x', transcript: 'What is happening tomorrow?', language_code: 'en-IN' }],
+});
+
+/**
+ * An empty transcript must never reach the agent.
+ *
+ * Silence, a muted microphone, or tapping record and saying nothing all produce
+ * one, and the agent answered with an empty string. Same principle as never
+ * letting it describe an inbox it cannot read: say what happened.
+ */
+const heardAnything = ifElse({
+  version: 2.2,
+  config: {
+    name: 'Heard Anything?',
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [
+          { id: 'heard-something', leftValue: expr('{{ $json.transcript }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true } },
+        ],
+        combinator: 'and',
+      },
+      options: {},
+    },
+    position: [1000, 180],
+  },
+});
+
+const heardNothing = node({
+  type: 'n8n-nodes-base.set',
+  version: 3.4,
+  config: {
+    name: 'Heard Nothing',
+    parameters: {
+      mode: 'manual',
+      includeOtherFields: false,
+      assignments: {
+        assignments: [
+          { id: 'reply', name: 'reply', type: 'string', value: "I didn't catch that. Try again?" },
+          { id: 'transcript', name: 'transcript', type: 'string', value: '' },
+        ],
+      },
+      options: {},
+    },
+    position: [1200, 40],
+  },
+  output: [{ reply: "I didn't catch that. Try again?", transcript: '' }],
 });
 
 const voicePrompt = node({
@@ -174,7 +239,7 @@ const voicePrompt = node({
     parameters: {
       mode: 'manual',
       includeOtherFields: false,
-      assignments: { assignments: [{ id: 'prompt', name: 'prompt', type: 'string', value: expr('{{ $json.text }}') }] },
+      assignments: { assignments: [{ id: 'prompt', name: 'prompt', type: 'string', value: expr('{{ $json.transcript }}') }] },
       options: {},
     },
     position: [1100, 180],
@@ -347,7 +412,15 @@ const identityNote = sticky(
 export default workflow('stead-web', 'Stead Web')
   .add(webhookTrigger)
   .to(normalize)
-  .to(isAudio.onTrue(decodeAudio.to(transcribe).to(voicePrompt).to(steadAgent)).onFalse(textPrompt.to(steadAgent)))
+  .to(
+    isAudio
+      .onTrue(
+        decodeAudio.to(transcribe).to(
+          heardAnything.onTrue(voicePrompt.to(steadAgent)).onFalse(heardNothing.to(respondSpoken)),
+        ),
+      )
+      .onFalse(textPrompt.to(steadAgent)),
+  )
   .add(steadAgent)
   .to(wasSpoken.onTrue(voiceReply.to(respondSpoken)).onFalse(textReply.to(respondText)))
   .add(identityNote);
