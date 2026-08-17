@@ -140,12 +140,29 @@ const decodeAudio = node({
   output: [{ audio_base64: 'GkXfo59', audio_mime: 'audio/webm' }],
 });
 
+/**
+ * The prompt is not decoration.
+ *
+ * Whisper transcribed "Hey Stead" as "He's dead", and the agent replied by
+ * offering emergency numbers. Priming it with the name and some household
+ * vocabulary fixes that class of error. `language` pins English, which also
+ * skips detection.
+ */
 const transcribe = node({
   type: '@n8n/n8n-nodes-langchain.openAi',
   version: 2.3,
   config: {
     name: 'Transcribe Voice Note',
-    parameters: { resource: 'audio', operation: 'transcribe', binaryPropertyName: 'data', options: {} },
+    parameters: {
+      resource: 'audio',
+      operation: 'transcribe',
+      binaryPropertyName: 'data',
+      options: {
+        language: 'en',
+        prompt:
+          "Hey Stead. Stead, what's on tomorrow? Stead is the household assistant being spoken to. Household topics: the school run, the dentist, the boiler service, swimming, shopping.",
+      },
+    },
     credentials: { openAiApi: newCredential('OpenAI') },
     position: [880, 180],
   },
@@ -188,6 +205,11 @@ const textPrompt = node({
  * `builtInTools` is silently ignored unless `responsesApiEnabled` is also true.
  * Setting one without the other yields a prompt promising web search and an
  * agent that has none.
+ *
+ * `searchContextSize` is the single biggest latency lever in the whole path.
+ * Measured on the same question: `high` cost the agent node 15,914 ms, `low`
+ * cost 7,269 ms. The search runs provider-side inside OpenAI's Responses API —
+ * `tool_calls.requested` stays 0 — so n8n's `maxIterations` does nothing here.
  */
 const steadModel = languageModel({
   type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
@@ -197,7 +219,7 @@ const steadModel = languageModel({
     parameters: {
       model: { __rl: true, mode: 'list', value: 'gpt-5-mini' },
       responsesApiEnabled: true,
-      builtInTools: { webSearch: { searchContextSize: 'high' } },
+      builtInTools: { webSearch: { searchContextSize: 'low' } },
       options: {},
     },
     credentials: { openAiApi: newCredential('OpenAI') },
