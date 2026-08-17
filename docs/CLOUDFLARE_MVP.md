@@ -4,6 +4,11 @@ The delivery path for Stead on the web and, once installed to a home screen, on
 a phone. It runs alongside the Telegram/Hermes preview and shares nothing with
 it: no code, no database, no credentials, no service.
 
+This file explains **why** the pieces are shaped this way.
+`docs/WEB_MVP_RUNBOOK.md` is the operational companion: what exists, how to
+rebuild it from nothing, and the failures that look like something they are
+not. Start there if you are recovering rather than reading.
+
 ```
                     Internet
                        │
@@ -354,6 +359,40 @@ tolerated because they are what n8n tends to produce:
 | a bare JSON string | used |
 | anything else, or an empty body | `502 agent_unavailable` |
 
+### The agent's real toolset, and one shared prompt
+
+`Stead Web` and both agents in `Stead Telegram` run the **same system prompt**,
+byte for byte. Keeping them identical is deliberate: two prompts drift, and the
+half that drifts is the half nobody demos.
+
+What the agent actually has:
+
+| | |
+|---|---|
+| Conversation memory | yes — 20 turns, keyed on the verified Supabase user id (web) or the chat id (Telegram) |
+| Web search | yes — OpenAI's built-in search via the Responses API |
+| Gmail | **no** |
+| Calendar | **no** |
+| Any other action | **no** |
+
+The prompt states exactly that and forbids the failure it used to invite:
+describing what an inbox or diary contains, or claiming something was added,
+moved, cancelled, booked or sent. The previous prompt devoted a section to
+"check Calendar", "search Gmail" and "create Calendar event if authorised" while
+no tool node was connected to either agent — an assistant told to use tools it
+does not have will describe results it did not get.
+
+Two traps found while fixing this, both worth knowing:
+
+- `builtInTools` is silently ignored unless `responsesApiEnabled` is also true.
+  Setting one without the other yields a prompt that promises search and an
+  agent that has none — the same fault, reintroduced by configuration.
+- Web search here is **not** the Python preview's search. `SECURITY.md` explains
+  at length why queries go to a local SearXNG: so a household's questions do not
+  reach a vendor. OpenAI's built-in search has no such property — the query goes
+  to OpenAI. The prompt tells the agent not to put personal details in a query,
+  which is a behavioural rule, not an enforced boundary.
+
 ### Speech runs on OpenAI, not on the stack ARCHITECTURE.md describes
 
 Worth stating plainly, because the two halves of Stead now sound different.
@@ -495,8 +534,7 @@ name appears in browser code and no webhook URL appears in Worker sources.
   is no barge-in and no open mic, and n8n Cloud cannot provide either — it is
   request/response. Realtime would replace the n8n hop for voice rather than
   extend it.
-- **No calendar or email tools** on the agent. The prompt says so plainly rather
-  than letting it describe an inbox it cannot read.
+- **No calendar or email tools** on the agent. See below.
 - No DNS changes.
 - No connection between this Worker and Hermes. n8n is the new orchestration
   path; the Telegram preview keeps its own.

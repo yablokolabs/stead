@@ -10,6 +10,10 @@ const ALLOWED_AUDIO = [
   'audio/ogg',
   'audio/mp4',
   'audio/mpeg',
+  // Non-standard, but what OpenAI's text-to-speech node actually labels its
+  // output. Omitting it made the gateway discard every spoken reply as an
+  // unacceptable media type — the defensive check firing on legitimate data.
+  'audio/mp3',
   'audio/wav',
   'audio/x-m4a',
   'audio/m4a',
