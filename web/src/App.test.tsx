@@ -77,10 +77,10 @@ describe('routing', () => {
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
   });
 
-  it('offers voice but does not yet enable it', async () => {
+  it('offers voice', async () => {
     signedIn();
     render(<App />);
-    expect(await screen.findByRole('button', { name: /Talk to Stead/ })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Talk to Stead' })).toBeEnabled();
   });
 
   it('follows the session when it changes', async () => {
@@ -213,5 +213,144 @@ describe('asking Stead', () => {
     const send = await screen.findByRole('button', { name: 'Send' });
     expect(send).toBeDisabled();
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe('talking to Stead', () => {
+  let trackStops: number;
+  let play: ReturnType<typeof vi.fn>;
+  let getUserMedia: ReturnType<typeof vi.fn>;
+
+  class FakeMediaRecorder {
+    static isTypeSupported(type: string) {
+      return type === 'audio/webm;codecs=opus';
+    }
+    state: 'inactive' | 'recording' = 'inactive';
+    mimeType: string;
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onstop: (() => void) | null = null;
+
+    constructor(_stream: unknown, options?: { mimeType?: string }) {
+      this.mimeType = options?.mimeType ?? 'audio/webm';
+    }
+    start() {
+      this.state = 'recording';
+    }
+    stop() {
+      this.state = 'inactive';
+      this.ondataavailable?.({ data: new Blob([new Uint8Array([9, 9, 9])], { type: this.mimeType }) });
+      this.onstop?.();
+    }
+  }
+
+  function stubGateway(body: unknown, status = 200) {
+    const impl = vi.fn(async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', impl);
+    return impl;
+  }
+
+  beforeEach(() => {
+    signedIn();
+    trackStops = 0;
+
+    const track = {
+      stop: () => {
+        trackStops += 1;
+      },
+    };
+    getUserMedia = vi.fn(async () => ({ getTracks: () => [track] }));
+
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia },
+    });
+
+    URL.createObjectURL = vi.fn(() => 'blob:stead-reply');
+    URL.revokeObjectURL = vi.fn();
+    play = vi.fn().mockResolvedValue(undefined);
+    HTMLMediaElement.prototype.play = play as unknown as HTMLMediaElement['play'];
+  });
+
+  async function startTalking() {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'Talk to Stead' }));
+    return user;
+  }
+
+  it('opens the microphone and shows that it is listening', async () => {
+    await startTalking();
+
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(await screen.findByRole('status')).toHaveTextContent('Listening…');
+    expect(screen.getByRole('button', { name: 'Stop and send' })).toBeInTheDocument();
+  });
+
+  it('sends the recording and shows what Stead heard and said', async () => {
+    const fetchImpl = stubGateway({
+      reply: 'Nothing in the diary tomorrow.',
+      transcript: 'Anything on tomorrow?',
+    });
+
+    const user = await startTalking();
+    await user.click(await screen.findByRole('button', { name: 'Stop and send' }));
+
+    await waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+    const [url, init] = fetchImpl.mock.calls[0]! as unknown as [string, RequestInit];
+    expect(url).toBe(`${API}/api/stead/voice`);
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('audio/webm;codecs=opus');
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${SESSION.access_token}`,
+    );
+
+    expect(await screen.findByText('Nothing in the diary tomorrow.')).toBeInTheDocument();
+    expect(screen.getByText(/Anything on tomorrow\?/)).toBeInTheDocument();
+  });
+
+  it('plays the spoken reply', async () => {
+    stubGateway({ reply: 'Nothing tomorrow.', audio_base64: 'aGk=', audio_mime: 'audio/mpeg' });
+
+    const user = await startTalking();
+    await user.click(await screen.findByRole('button', { name: 'Stop and send' }));
+
+    await screen.findByText('Nothing tomorrow.');
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    // Once to unlock playback during the tap, once for the reply itself.
+    expect(play.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('releases the microphone once the recording is sent', async () => {
+    stubGateway({ reply: 'Nothing tomorrow.' });
+
+    const user = await startTalking();
+    await user.click(await screen.findByRole('button', { name: 'Stop and send' }));
+
+    await screen.findByText('Nothing tomorrow.');
+    expect(trackStops).toBeGreaterThan(0);
+  });
+
+  it('explains a refused microphone without sending anything', async () => {
+    const fetchImpl = stubGateway({ reply: 'unused' });
+    getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+
+    await startTalking();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('needs microphone access');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Talk to Stead' })).toBeInTheDocument();
+  });
+
+  it('explains a browser that cannot record at all', async () => {
+    vi.stubGlobal('MediaRecorder', undefined);
+
+    await startTalking();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('cannot record audio');
   });
 });

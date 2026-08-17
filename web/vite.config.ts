@@ -56,7 +56,9 @@ function securityHeaders(): Plugin {
         'X-Content-Type-Options: nosniff',
         'Referrer-Policy: strict-origin-when-cross-origin',
         'X-Frame-Options: DENY',
-        'Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()',
+        // microphone is granted to this origin only, for push to talk. Every
+        // other capability stays denied, including to any embedded frame.
+        'Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(self), payment=(), usb=()',
         'Cross-Origin-Opener-Policy: same-origin',
       ];
 

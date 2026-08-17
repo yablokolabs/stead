@@ -134,6 +134,12 @@ body {
   color: var(--ink);
 }
 
+.button--recording {
+  background: var(--error-bg);
+  border-color: var(--error);
+  color: var(--error);
+}
+
 .button--link {
   padding: 0;
   min-height: 0;

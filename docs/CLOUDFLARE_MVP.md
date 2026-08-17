@@ -251,10 +251,63 @@ up.
 
 Success is `200 {"reply": "…"}`. Nothing n8n returns is passed through verbatim.
 
+### `POST /api/stead/voice`
+
+Push to talk. The body **is** the recording — not base64 in JSON, because
+encoding would add a third to every upload and a phone on mobile data is the
+case that matters. The Worker base64-encodes it once, server-side, for n8n.
+
+```http
+POST /api/stead/voice
+Authorization: Bearer <supabase access token>
+Content-Type: audio/webm;codecs=opus
+
+<raw audio bytes>
+```
+
+Accepted containers: `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/mpeg`,
+`audio/wav`, `audio/x-m4a`, `audio/m4a`, `audio/flac`. Codec parameters are
+stripped. Anything else is `415`.
+
+This list is not decoration. Chrome and Firefox record WebM/Opus; Safari —
+which is every browser on iOS, including the home-screen PWA — records MP4.
+Both must work or half the households cannot speak to Stead.
+
+Limits: 4 MB, roughly eight minutes of Opus. Empty bodies are `400`.
+
+Success is `200`:
+
+```json
+{
+  "reply": "Nothing in the diary tomorrow.",
+  "transcript": "Anything on tomorrow?",
+  "audio_base64": "…",
+  "audio_mime": "audio/mpeg"
+}
+```
+
+`transcript` and the audio pair appear only when the agent returned them. The
+media type is re-checked against the same allowlist on the way out: it becomes
+a `Blob` type in the browser, and upstream is not the authority on what this
+gateway hands a household's device.
+
 ## The n8n contract
 
-Not built by this task. Build a workflow with a **Webhook** trigger (POST) and a
-**Respond to Webhook** node, then set `N8N_WEBHOOK_URL` to its production URL.
+The workflow is **`Stead Web`** (17 nodes). `Stead Telegram` is untouched and
+shares nothing with it beyond the OpenAI credential.
+
+```
+Webhook (Header Auth) ─▶ Normalise ─▶ Spoken?
+    ├─ yes: Decode Audio ─▶ Whisper ─▶ Prompt From Speech ─┐
+    └─ no:  Prompt From Text ───────────────────────────────┤
+                                                            ▼
+                                             Stead Web Agent (gpt-5-mini)
+                                             memory keyed on the Supabase user id
+                                                            │
+                                                      Reply Aloud?
+                                        ├─ yes: tts-1 ─▶ Encode ─▶ Respond
+                                        └─ no:  ──────────────────▶ Respond
+```
 
 What the Worker sends:
 
@@ -274,21 +327,51 @@ X-Stead-Request-Id: <uuid, also in the body and in the Worker log line>
 }
 ```
 
-**The workflow must reject any request whose `X-Stead-Webhook-Secret` does not
-match.** The webhook URL is reachable by anyone who learns it; the header is
-what makes the gateway the only way in. Trust `X-Stead-User-Id` and the `user`
-object only because that check passed.
+A spoken turn replaces `message` with `audio_base64` and `audio_mime`. Exactly
+one of the two is ever present.
 
-What the Worker accepts back — `{"reply": "…"}` is the contract; the other two
-are tolerated because they are what n8n tends to produce:
+**The webhook rejects any request whose `X-Stead-Webhook-Secret` does not
+match**, using the Webhook node's own Header Auth rather than a comparison node,
+so the check happens before the workflow runs and the value never appears in the
+workflow JSON. The webhook URL is reachable by anyone who learns it; the header
+is what makes the gateway the only way in. Trust `X-Stead-User-Id` and the
+`user` object only because that check passed.
+
+**Memory is keyed on the verified Supabase user id**, not on a chat id as the
+Telegram workflow does. That key is the identity boundary reaching its
+destination; pointing it at anything the browser can influence would let one
+household read another.
+
+What the Worker accepts back — `{"reply": "…"}` is the contract; the rest are
+tolerated because they are what n8n tends to produce:
 
 | Shape | Result |
 |---|---|
 | `{"reply": "…"}` | used |
+| `{"reply": …, "transcript": …, "audio_base64": …, "audio_mime": …}` | used, for a spoken turn |
 | `{"output": "…"}` | used — the AI Agent node's own field name |
 | `[{"reply": "…"}]` | used — n8n item arrays are unwrapped |
 | a bare JSON string | used |
 | anything else, or an empty body | `502 agent_unavailable` |
+
+### Speech runs on OpenAI, not on the stack ARCHITECTURE.md describes
+
+Worth stating plainly, because the two halves of Stead now sound different.
+
+`ARCHITECTURE.md` documents a deliberate choice for the Telegram preview:
+Sarvam for transcription, Edge `en-GB-RyanNeural` for synthesis, chosen because
+Sarvam has no British voice and Stead serves a British household. The n8n path
+predates that decision reaching it and uses OpenAI Whisper plus `tts-1` with the
+voice `alloy`, which is not British.
+
+This was accepted for the first demo rather than fixed. `tts-1` has no `en-GB`
+male voice, so matching the documented choice means another vendor — Azure
+Speech carries the same `en-GB-Ryan`. Changing it is one node.
+
+Two consequences to record rather than discover later: household audio and
+household context now reach OpenAI, an egress vendor `SECURITY.md` does not
+list; and everything runs on the `n8n free OpenAI API credits` credential, which
+is a finite trial pool.
 
 ## Deployment
 
@@ -356,10 +439,16 @@ The policy permits `'self'` plus, in `connect-src`, the Supabase project origin
 module script and no inline `<style>` or `<script>`, verified against the built
 output.
 
-Also served: `X-Content-Type-Options`, `Referrer-Policy`,
-`Permissions-Policy` (camera, microphone and geolocation denied — revisit when
-browser voice arrives), `X-Frame-Options: DENY`, `frame-ancestors 'none'` and
-`Cross-Origin-Opener-Policy`.
+Also served: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options:
+DENY`, `frame-ancestors 'none'`, `Cross-Origin-Opener-Policy`, and
+`Permissions-Policy` granting `microphone=(self)` and denying everything else —
+camera, geolocation, payment, USB and the motion sensors — including to any
+embedded frame.
+
+**The microphone.** It is opened on the tap that starts recording and the
+media tracks are stopped the moment the recording ends or the screen unmounts,
+so the browser's recording indicator is not left on in someone's kitchen. A
+test fails if that release is removed.
 
 **CORS.** Origin allowlist, no wildcard on the authenticated route, and
 deliberately no `Access-Control-Allow-Credentials`: the session travels in an
@@ -369,8 +458,10 @@ enforced, a browser always sends `Origin` cross-origin, and refusing curl would
 break debugging without closing anything.
 
 **Logging.** One JSON line per request: request id, method, path, status,
-upstream status, verified user id, duration. Never the token, the message, the
-email, the webhook secret or the n8n URL. A test asserts each of those absences.
+upstream status, verified user id, duration, and the byte length of any
+recording. Never the token, the message, the transcript, the recording itself,
+the email, the webhook secret or the n8n URL. A test asserts each of those
+absences.
 
 **Errors.** A fixed set of codes. Upstream text, stack traces and internal URLs
 never reach a response — a test has n8n return a body containing the secret, the
@@ -381,8 +472,8 @@ copy and renders nothing a server sent.
 ## Testing
 
 ```bash
-cd worker && npx vitest run     # 48
-cd web    && npx vitest run     # 25
+cd worker && npx vitest run     # 69
+cd web    && npx vitest run     # 43
 ```
 
 The Worker tests generate a real ES256 keypair and sign real tokens; only the
@@ -395,14 +486,17 @@ signature verification each breaks a different test.
 `.dev.vars`, `web/.env*`, and greps asserting that no n8n hostname or secret
 name appears in browser code and no webhook URL appears in Worker sources.
 
-## What this task did not do
+## Still open
 
-- No n8n workflow. The contract above is documented; nothing was created.
 - **No service worker**, so Chrome will not offer its install prompt yet. iOS
   "Add to Home Screen" works from the manifest alone. This is also the gate for
   web push later, which iOS grants only to home-screen-installed apps.
-- No voice. `Talk to Stead` is present and disabled. The existing Telegram voice
-  path is untouched.
+- **No realtime voice.** Push to talk is a turn: record, send, wait, hear. There
+  is no barge-in and no open mic, and n8n Cloud cannot provide either — it is
+  request/response. Realtime would replace the n8n hop for voice rather than
+  extend it.
+- **No calendar or email tools** on the agent. The prompt says so plainly rather
+  than letting it describe an inbox it cannot read.
 - No DNS changes.
 - No connection between this Worker and Hermes. n8n is the new orchestration
   path; the Telegram preview keeps its own.

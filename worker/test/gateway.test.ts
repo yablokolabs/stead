@@ -487,3 +487,192 @@ describe('logging', () => {
     expect(entry).toMatchObject({ status: 401, user_id: null });
   });
 });
+
+describe('push to talk', () => {
+  let token: string;
+
+  beforeEach(async () => {
+    token = await mintToken();
+    upstream = () =>
+      jsonResponse({
+        reply: 'Nothing in the diary tomorrow.',
+        transcript: 'Anything on tomorrow?',
+        audio_base64: 'SUQzBAAAAAA',
+        audio_mime: 'audio/mpeg',
+      });
+  });
+
+  /** Deliberately not the Worker's own encoder — that is what is under test. */
+  function decodeBase64(value: string): Uint8Array {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function recording(bytes: Uint8Array, options: PostOptions = {}): Request {
+    const headers = new Headers();
+    headers.set('Content-Type', options.contentType ?? 'audio/webm;codecs=opus');
+    if (options.origin !== null) headers.set('Origin', options.origin ?? ORIGIN);
+    if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
+
+    return new Request('https://gateway.example.com/api/stead/voice', {
+      method: options.method ?? 'POST',
+      headers,
+      body: bytes as unknown as BodyInit,
+    });
+  }
+
+  const somAudio = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x00, 0xff, 0x7f, 0x80]);
+
+  it('rejects a recording from an unauthenticated caller', async () => {
+    expect((await call(recording(somAudio))).status).toBe(401);
+    expect(n8nCalls).toHaveLength(0);
+  });
+
+  it('forwards the recording with the verified identity', async () => {
+    const response = await call(recording(somAudio, { token }));
+    expect(response.status).toBe(200);
+
+    const forwarded = n8nCalls[0]!;
+    expect(forwarded.headers.get('X-Stead-User-Id')).toBe(USER_ID);
+    expect(forwarded.headers.get('X-Stead-Webhook-Secret')).toBe(N8N_SECRET);
+
+    const body = (await forwarded.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ audio_mime: 'audio/webm', channel: 'web' });
+    expect(body.user).toEqual({ id: USER_ID, email: USER_EMAIL });
+    expect(body).not.toHaveProperty('message');
+  });
+
+  it('encodes the audio so it survives the round trip', async () => {
+    await call(recording(somAudio, { token }));
+    const body = (await n8nCalls[0]!.json()) as { audio_base64: string };
+    expect(decodeBase64(body.audio_base64)).toEqual(somAudio);
+  });
+
+  /**
+   * 300 kB is past the point where spreading every byte into
+   * `String.fromCharCode` overflows V8's stack — measured between 100 kB and
+   * 200 kB — so this fails if the chunking in `toBase64` is ever removed.
+   * It is also an unremarkable length for a spoken sentence.
+   */
+  it('encodes a recording larger than one chunk', async () => {
+    const long = new Uint8Array(300_000);
+    for (let i = 0; i < long.length; i += 1) long[i] = i % 256;
+
+    await call(recording(long, { token }));
+    const body = (await n8nCalls[0]!.json()) as { audio_base64: string };
+    expect(decodeBase64(body.audio_base64)).toEqual(long);
+  });
+
+  it.each([
+    ['Chrome and Firefox', 'audio/webm;codecs=opus', 'audio/webm'],
+    ['Safari and iOS', 'audio/mp4', 'audio/mp4'],
+    ['an mp4 with a codec parameter', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4'],
+    ['uppercase from a stray client', 'AUDIO/WEBM', 'audio/webm'],
+  ])('accepts what %s records', async (_label, contentType, expected) => {
+    const response = await call(recording(somAudio, { token, contentType }));
+    expect(response.status).toBe(200);
+    await expect(n8nCalls[0]!.json()).resolves.toMatchObject({ audio_mime: expected });
+  });
+
+  it.each([
+    ['plain text', 'text/plain'],
+    ['JSON', 'application/json'],
+    ['an unsupported container', 'audio/aiff'],
+    ['a disguised document', 'text/html'],
+  ])('refuses %s', async (_label, contentType) => {
+    expect((await call(recording(somAudio, { token, contentType }))).status).toBe(415);
+    expect(n8nCalls).toHaveLength(0);
+  });
+
+  it('refuses an empty recording', async () => {
+    expect((await call(recording(new Uint8Array(0), { token }))).status).toBe(400);
+    expect(n8nCalls).toHaveLength(0);
+  });
+
+  it('refuses a recording past the size limit', async () => {
+    const huge = new Uint8Array(4 * 1024 * 1024 + 1);
+    const response = await call(recording(huge, { token }));
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({ error: 'payload_too_large' });
+    expect(n8nCalls).toHaveLength(0);
+  });
+
+  it('returns the spoken reply alongside the transcript', async () => {
+    const response = await call(recording(somAudio, { token }));
+    await expect(response.json()).resolves.toEqual({
+      reply: 'Nothing in the diary tomorrow.',
+      transcript: 'Anything on tomorrow?',
+      audio_base64: 'SUQzBAAAAAA',
+      audio_mime: 'audio/mpeg',
+    });
+  });
+
+  /**
+   * The media type ends up as a Blob type in the browser. Upstream is not the
+   * authority on what this gateway hands a household's device.
+   */
+  it('drops audio whose media type is not one it would accept', async () => {
+    upstream = () =>
+      jsonResponse({
+        reply: 'Here you go.',
+        audio_base64: 'PHNjcmlwdD4',
+        audio_mime: 'text/html',
+      });
+
+    const response = await call(recording(somAudio, { token }));
+    await expect(response.json()).resolves.toEqual({ reply: 'Here you go.' });
+  });
+
+  it('still answers when n8n returns text only', async () => {
+    upstream = () => jsonResponse({ reply: 'Nothing tomorrow.' });
+    const response = await call(recording(somAudio, { token }));
+    await expect(response.json()).resolves.toEqual({ reply: 'Nothing tomorrow.' });
+  });
+
+  it('reports agent_unavailable without leaking upstream text', async () => {
+    upstream = () => new Response(`whisper failed at ${N8N_URL} secret=${N8N_SECRET}`, { status: 500 });
+    const response = await call(recording(somAudio, { token }));
+    const text = await response.text();
+    expect(response.status).toBe(502);
+    expect(text).toBe('{"error":"agent_unavailable"}');
+    expect(text).not.toContain(N8N_SECRET);
+  });
+
+  it('refuses a disallowed origin', async () => {
+    const response = await call(
+      recording(somAudio, { token, origin: 'https://evil.example.com' }),
+    );
+    expect(response.status).toBe(403);
+    expect(n8nCalls).toHaveLength(0);
+  });
+
+  it('logs the recording size but never what was said', async () => {
+    await call(recording(somAudio, { token }));
+
+    const entry = JSON.parse(logLines.at(-1)!) as Record<string, unknown>;
+    expect(entry).toMatchObject({
+      path: '/api/stead/voice',
+      status: 200,
+      user_id: USER_ID,
+      audio_bytes: somAudio.length,
+    });
+
+    const logged = logLines.join('\n');
+    expect(logged).not.toContain('Anything on tomorrow?');
+    expect(logged).not.toContain('diary');
+    expect(logged).not.toContain('SUQzB');
+    expect(logged).not.toContain(N8N_SECRET);
+  });
+
+  it('answers a preflight for the voice route', async () => {
+    const request = new Request('https://gateway.example.com/api/stead/voice', {
+      method: 'OPTIONS',
+      headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'POST' },
+    });
+    const response = await call(request);
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+  });
+});
