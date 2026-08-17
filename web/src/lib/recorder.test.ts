@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { pickRecordingMime, RECORDING_MIME_CANDIDATES, speak, stopSpeaking } from './recorder';
+import {
+  pickRecordingMime,
+  pickVoice,
+  RECORDING_MIME_CANDIDATES,
+  speak,
+  stopSpeaking,
+} from './recorder';
 
 describe('pickRecordingMime', () => {
   const supporting =
@@ -30,6 +36,42 @@ describe('pickRecordingMime', () => {
     for (const candidate of RECORDING_MIME_CANDIDATES) {
       expect(accepted).toContain(candidate.split(';')[0]);
     }
+  });
+});
+
+describe('pickVoice', () => {
+  const v = (name: string, lang: string, localService = true) =>
+    ({ name, lang, localService }) as SpeechSynthesisVoice;
+
+  it('returns nothing when the device has no English voice', () => {
+    expect(pickVoice([v('Amélie', 'fr-FR'), v('Yuna', 'ko-KR')])).toBeUndefined();
+  });
+
+  it('prefers British over other English', () => {
+    const pick = pickVoice([v('Samantha', 'en-US'), v('Serena', 'en-GB')]);
+    expect(pick?.name).toBe('Serena');
+  });
+
+  /** The first en-GB entry is often the oldest and worst on the system. */
+  it('prefers a natural voice over the first British one in the list', () => {
+    const pick = pickVoice([
+      v('Daniel', 'en-GB'),
+      v('Microsoft Ryan Online (Natural) - English (United Kingdom)', 'en-GB', false),
+    ]);
+    expect(pick?.name).toContain('Natural');
+  });
+
+  it('prefers a network voice over a local one of the same locale', () => {
+    const pick = pickVoice([v('Local Brit', 'en-GB'), v('Cloud Brit', 'en-GB', false)]);
+    expect(pick?.name).toBe('Cloud Brit');
+  });
+
+  it('takes an American natural voice over a poor British one', () => {
+    const pick = pickVoice([
+      v('Daniel (Compact)', 'en-GB'),
+      v('Google US English Neural', 'en-US', false),
+    ]);
+    expect(pick?.name).toBe('Google US English Neural');
   });
 });
 

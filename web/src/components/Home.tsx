@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { askStead, speakToStead, SteadApiError, type SteadReply } from '../lib/api';
+import { speakableText } from '../lib/text';
 import {
   MicrophoneDenied,
   playReply,
@@ -55,16 +56,25 @@ export function Home({ apiUrl }: { apiUrl: string }) {
     return token;
   }
 
-  /** Returns whether the turn succeeded, so a failed message is not lost. */
-  async function runTurn(send: () => Promise<SteadReply>): Promise<boolean> {
+  /**
+   * Returns whether the turn succeeded, so a failed message is not lost.
+   *
+   * `aloud` is the caller's, not this function's: typing to Stead should not
+   * make it talk back, and this is shared by both paths.
+   */
+  async function runTurn(send: () => Promise<SteadReply>, aloud: boolean): Promise<boolean> {
     setPhase('thinking');
     setError(null);
     setTurn(null);
     try {
       const result = await send();
-      setTurn({ transcript: result.transcript, reply: result.reply });
+      // Web search injects citations after the model has written the reply, so
+      // the markdown is stripped here rather than asked for in the prompt.
+      const reply = speakableText(result.reply);
+      setTurn({ transcript: result.transcript, reply });
+      if (!aloud) return true;
       if (result.audio) playReply(result.audio);
-      else speak(result.reply);
+      else speak(reply);
       return true;
     } catch (cause) {
       report(cause);
@@ -79,8 +89,9 @@ export function Home({ apiUrl }: { apiUrl: string }) {
     const text = message.trim();
     if (!text || phase !== 'idle') return;
 
-    const sent = await runTurn(async () =>
-      askStead({ apiUrl, accessToken: await accessToken(), message: text }),
+    const sent = await runTurn(
+      async () => askStead({ apiUrl, accessToken: await accessToken(), message: text }),
+      false,
     );
     if (sent) setMessage('');
   }
@@ -92,8 +103,9 @@ export function Home({ apiUrl }: { apiUrl: string }) {
         setPhase('idle');
         return;
       }
-      await runTurn(async () =>
-        speakToStead({ apiUrl, accessToken: await accessToken(), recording }),
+      await runTurn(
+        async () => speakToStead({ apiUrl, accessToken: await accessToken(), recording }),
+        true,
       );
       return;
     }
