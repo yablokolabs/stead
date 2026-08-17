@@ -141,12 +141,13 @@ const decodeAudio = node({
 });
 
 /**
- * The prompt is not decoration.
+ * `options` supports ONLY `language` and `temperature`.
  *
- * Whisper transcribed "Hey Stead" as "He's dead", and the agent replied by
- * offering emergency numbers. Priming it with the name and some household
- * vocabulary fixes that class of error. `language` pins English, which also
- * skips detection.
+ * There is no `prompt` and no model choice — it is whisper-1 or nothing. A
+ * prompt set here to stop Whisper hearing "Hey Stead" as "He's dead" was
+ * silently discarded, and `validate_workflow` did not object. Fixing the name
+ * properly needs a direct HTTP call to the transcription API, which needs a
+ * real OpenAI key; see the runbook's field note on the managed credential.
  */
 const transcribe = node({
   type: '@n8n/n8n-nodes-langchain.openAi',
@@ -157,11 +158,7 @@ const transcribe = node({
       resource: 'audio',
       operation: 'transcribe',
       binaryPropertyName: 'data',
-      options: {
-        language: 'en',
-        prompt:
-          "Hey Stead. Stead, what's on tomorrow? Stead is the household assistant being spoken to. Household topics: the school run, the dentist, the boiler service, swimming, shopping.",
-      },
+      options: { language: 'en' },
     },
     credentials: { openAiApi: newCredential('OpenAI') },
     position: [880, 180],
@@ -220,7 +217,10 @@ const steadModel = languageModel({
       model: { __rl: true, mode: 'list', value: 'gpt-5-mini' },
       responsesApiEnabled: true,
       builtInTools: { webSearch: { searchContextSize: 'low' } },
-      options: {},
+      // gpt-5-mini is a reasoning model and this defaults to `medium`, which
+      // cost 3,894 ms of a 5,800 ms turn on "what day is tomorrow". `low`
+      // roughly halves it.
+      options: { reasoningEffort: 'low' },
     },
     credentials: { openAiApi: newCredential('OpenAI') },
     position: [1320, 480],
