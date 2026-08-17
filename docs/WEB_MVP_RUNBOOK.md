@@ -384,6 +384,54 @@ from a completely different service with a plausible-looking JSON error shape.
 
 ---
 
+## Latency
+
+Measured on 2026-08-17, from n8n's own per-node `executionTime`. Read this
+before optimising anything: the intuitive answers are wrong.
+
+**Cloudflare Pages makes no difference to reply time.** It serves static assets.
+Every message goes browser → Worker → n8n and Pages sits nowhere on that path.
+It does make the *first page load* much faster, which is a different problem.
+
+A spoken turn that triggered a web search, before tuning:
+
+| Node | Time | Share |
+|---|---:|---:|
+| Stead Web Agent | 15,914 ms | 73% |
+| Generate Speech (`tts-1`) | 3,050 ms | 14% |
+| Transcribe (Whisper) | 1,215 ms | 6% |
+| n8n overhead | ~1,600 ms | 7% |
+| Decode Audio | 5 ms | — |
+| **Total** | **21.8 s** | |
+
+The agent dominates, and web search dominates the agent. Same question, only
+`searchContextSize` changed:
+
+| `searchContextSize` | Agent node | Whole text turn |
+|---|---:|---:|
+| `high` | 15,914 ms | ~17.5 s |
+| `low` | 7,269 ms | 7.3 s |
+
+**The search runs provider-side**, inside OpenAI's Responses API. The trace
+shows `ai.agent.tool_calls.requested: 0` and `iteration.count: 0` while the
+reply still quotes a live temperature — so n8n's `maxIterations` is not a lever
+and never was. `searchContextSize` is the only knob.
+
+A turn needing no search costs ~6.3 s, which is `gpt-5-mini`'s own latency.
+That is the floor without changing model.
+
+Remaining levers, largest first:
+
+- **Replace `tts-1` with the browser's `speechSynthesis`** — removes ~3 s and
+  the base64 round trip, and starts speaking immediately. Costs the consistent
+  voice.
+- **Turn web search off** — removes the remaining search cost entirely, at the
+  cost of a genuinely useful capability.
+- **A faster model** — moves the ~6 s floor.
+- **Show the transcript as soon as it exists** — changes nothing measurable,
+  changes the experience a lot. Needs streaming or two round trips, and n8n's
+  Respond to Webhook is all-or-nothing.
+
 ## Verifying the whole path
 
 After any change, in order. Each step isolates one hop.
