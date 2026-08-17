@@ -137,15 +137,35 @@ export function primePlayback(): void {
 }
 
 /**
- * Prefer a British voice.
+ * Rank a voice. Higher is better; below zero means unusable.
  *
- * `ARCHITECTURE.md` argues at length that Stead serves a British household and
- * should sound like it. The device's own voices get closer to that than the
- * server-side `alloy` ever did, and cost nothing.
+ * Device voice quality varies enormously, and the first `en-GB` entry in the
+ * list is usually the oldest and worst — a 1990s formant synthesiser on some
+ * systems. The good ones are identifiable: "Natural" or "Neural" in the name
+ * (Edge's are excellent), and network voices, which are almost always better
+ * than the ones shipped in the OS.
+ *
+ * `ARCHITECTURE.md` argues Stead serves a British household and should sound
+ * like it, so `en-GB` outranks everything else.
  */
-function preferredVoice(): SpeechSynthesisVoice | undefined {
-  const voices = window.speechSynthesis.getVoices();
-  return voices.find((v) => v.lang === 'en-GB') ?? voices.find((v) => v.lang.startsWith('en'));
+export function scoreVoice(voice: SpeechSynthesisVoice): number {
+  let score: number;
+  if (voice.lang === 'en-GB') score = 100;
+  else if (voice.lang.startsWith('en')) score = 50;
+  else return -1;
+
+  if (/natural|neural/i.test(voice.name)) score += 30;
+  if (!voice.localService) score += 20;
+  if (/google/i.test(voice.name)) score += 10;
+  // Named voices that are known to be poor on their platforms.
+  if (/daniel|compact|eloquence/i.test(voice.name)) score -= 15;
+  return score;
+}
+
+export function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+  const usable = voices.filter((v) => scoreVoice(v) >= 0);
+  if (usable.length === 0) return undefined;
+  return usable.reduce((best, v) => (scoreVoice(v) > scoreVoice(best) ? v : best));
 }
 
 /**
@@ -161,7 +181,7 @@ export function speak(text: string): void {
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'en-GB';
-  const voice = preferredVoice();
+  const voice = pickVoice(window.speechSynthesis.getVoices());
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
 }

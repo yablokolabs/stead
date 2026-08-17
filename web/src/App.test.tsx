@@ -149,7 +149,49 @@ describe('asking Stead', () => {
     return user;
   }
 
-  beforeEach(() => signedIn());
+  let typedSpoken: string[];
+
+  beforeEach(() => {
+    signedIn();
+    typedSpoken = [];
+    class FakeUtterance {
+      lang = '';
+      voice: unknown = null;
+      constructor(public text: string) {}
+    }
+    vi.stubGlobal('SpeechSynthesisUtterance', FakeUtterance);
+    vi.stubGlobal('speechSynthesis', {
+      cancel: vi.fn(),
+      speak: (u: { text: string }) => void typedSpoken.push(u.text),
+      getVoices: () => [],
+    });
+  });
+
+  /** Typing to Stead must not make it talk back at you. */
+  it('does not read a typed reply aloud', async () => {
+    stubGateway({ reply: 'The boiler service is on Tuesday.' });
+
+    await ask('when is the boiler service?');
+
+    await screen.findByText('The boiler service is on Tuesday.');
+    expect(typedSpoken).not.toContain('The boiler service is on Tuesday.');
+  });
+
+  /** Citations from web search read out as "w w w dot axios dot com". */
+  it('shows a reply with its markdown citations stripped', async () => {
+    stubGateway({
+      reply:
+        'The White House finalized a framework. ([axios.com](https://www.axios.com/2026/08/03/white-house-finalizes-ai-framework?utm_source=openai))',
+    });
+
+    await ask('top AI news?');
+
+    expect(
+      await screen.findByText('The White House finalized a framework.'),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('http');
+    expect(document.body.textContent).not.toContain('axios');
+  });
 
   it('sends the message with the current access token and shows the reply', async () => {
     const fetchImpl = stubGateway({ reply: 'The boiler service is on Tuesday.' });
