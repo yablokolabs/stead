@@ -25,6 +25,8 @@ Everything the web path depends on, as of 2026-08-17.
 | Worker | `stead-gateway` | `https://stead-gateway.young-disk-9d1c.workers.dev` |
 | n8n instance | `yablokolabs.app.n8n.cloud` | n8n Cloud |
 | n8n workflow | `Stead Web`, id `7timLWnuspV2O1mb` | source of truth: `docs/n8n/stead-web.workflow.ts` |
+| Agent model | Google Gemini `models/gemini-3.1-flash-lite` | credential `Google Gemini(PaLM) Api account` |
+| Transcription | OpenAI `whisper-1` | credential `OpenAI account` — **needs account credit** |
 | n8n webhook | `https://yablokolabs.app.n8n.cloud/webhook/stead-web` | |
 | Pages project | **not created yet** | |
 | Custom domain | **not configured** | |
@@ -365,6 +367,66 @@ This one fact explains three symptoms that look unrelated:
 **A real OpenAI API key fixes all three**, and is the single highest-value
 change left. Create one, add it as a normal `openAiApi` credential, and repoint
 `Transcribe Voice Note`, `Stead Web Model` and any future speech node at it.
+
+### The free credits run out, and everything stops
+
+Symptom: every request, voice and text, fails in under a second with an empty
+body. The n8n execution says:
+
+```
+"It looks like you've used all your free n8n AI credits."
+```
+
+This takes **`Stead Telegram` down as well** — both workflows share the
+credential, so the Telegram preview dies at the same moment as the web path.
+
+There is no warning before it happens. Treat the free pool as a demo
+convenience, not a dependency.
+
+### An OpenAI key is not an OpenAI balance
+
+Creating a key at platform.openai.com does not fund the account. A new account
+sits at zero and every call returns:
+
+```
+"You exceeded your current quota, please check your plan and billing details."
+```
+
+The key is valid and the request reaches `api.openai.com` — the execution trace
+confirms the baseURL is right — it simply has no credit. Fix it under
+**Settings → Billing**, not by making another key.
+
+### A deleted credential breaks the whole workflow
+
+If a node references a credential that has since been deleted, `get_workflow_details`
+fails outright with `Credential with ID "…" could not be found`, and every
+request dies at the trigger with `No authentication data defined on node!` —
+which reads like a node problem rather than a missing credential elsewhere.
+
+It happened here because the OpenAI key was first saved as a Header Auth
+credential, attached to the webhook, then deleted. Repair it with
+`setNodeCredential` pointing at a credential that still exists; reads stay
+broken until you do, but writes still work.
+
+### Gemini transcription does not work as a drop-in
+
+Swapping `Transcribe Voice Note` to `@n8n/n8n-nodes-langchain.googleGemini`
+(`resource: audio, operation: transcribe`, `inputType: binary`) produced a
+successful execution whose "transcript" was:
+
+> "it looks like the audio or video file was not attached to your message"
+
+The binary never reached it. It also took **5,951 ms** to say so, against
+Whisper's 1,851 ms, and `simplify: true` did not simplify — the text arrives at
+`content.parts[0].text`, not `text`.
+
+The dangerous part is what happened next: `Prompt From Speech` produced `null`,
+and the agent **answered confidently anyway** — "I'm ready to help you manage
+the household" — with nothing to indicate it had heard nothing. If you retry
+this, add a guard that fails the run on an empty transcript rather than passing
+it to the agent.
+
+Gemini is a good chat model here and a fast one. It is not a transcriber.
 
 ### The transcribe node has no `prompt` and no model choice
 
