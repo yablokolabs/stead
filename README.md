@@ -211,3 +211,7 @@ any other path. Deletes demo data only — never the profile or service.
 - `MIGRATION.md` — secure backup and clean AWS restore
 - `HANDOFF.md` — the checklist before showing Kerstin
 - `docs/CLOUDFLARE_MVP.md` — the web MVP: Pages, Worker, Supabase Auth, n8n
+- `docs/WEB_MVP_RUNBOOK.md` — rebuild the web MVP from zero, and every failure
+  that cost us an afternoon
+- `docs/n8n/stead-web.workflow.ts` — the only copy of the n8n workflow outside
+  n8n Cloud

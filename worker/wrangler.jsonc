@@ -24,11 +24,17 @@
   "vars": {
     "SUPABASE_URL": "https://lzzrpzdjzybpvykspxiy.supabase.co",
 
-    // CHANGE THIS before the first production deploy: the exact origin Pages
-    // serves the app from. The *.pages.dev origin at first, then the custom
-    // domain. Wrong value and every browser request is refused; a wildcard
-    // would let any site drive a signed-in user's Stead.
-    "ALLOWED_ORIGIN": "https://stead-preview.pages.dev",
+    // Comma-separated. The exact origins Pages serves the app from — the
+    // *.pages.dev origin at first, then the custom domain. Wrong value and
+    // every browser request is refused; a wildcard would let any site drive a
+    // signed-in user's Stead.
+    //
+    // localhost:5173 is here so `npm run dev` can talk to the deployed gateway
+    // during the beta. It costs nothing to an attacker — reaching it still
+    // needs a valid Supabase token — but it should come out once the household
+    // is real, because it means a page served from any developer's machine can
+    // drive a signed-in session.
+    "ALLOWED_ORIGIN": "https://stead-preview.pages.dev,http://localhost:5173",
 
     // A spoken turn is three model calls end to end — transcribe, agent,
     // synthesise — so it needs more headroom than a typed one.

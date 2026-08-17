@@ -610,6 +610,26 @@ describe('push to talk', () => {
   });
 
   /**
+   * OpenAI's text-to-speech node labels its output `audio/mp3`, which is not
+   * the registered type for MP3. Rejecting it discarded every spoken reply in
+   * production while every test still passed.
+   */
+  it.each([
+    ['audio/mpeg', 'audio/mpeg'],
+    ['audio/mp3, as the TTS node actually labels it', 'audio/mp3'],
+  ])('passes through a reply labelled %s', async (_label, mime) => {
+    upstream = () =>
+      jsonResponse({ reply: 'Here you go.', audio_base64: 'aGk=', audio_mime: mime });
+
+    const response = await call(recording(somAudio, { token }));
+    await expect(response.json()).resolves.toEqual({
+      reply: 'Here you go.',
+      audio_base64: 'aGk=',
+      audio_mime: mime,
+    });
+  });
+
+  /**
    * The media type ends up as a Blob type in the browser. Upstream is not the
    * authority on what this gateway hands a household's device.
    */
