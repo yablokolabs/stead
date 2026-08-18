@@ -385,7 +385,7 @@ What the agent actually has:
 |---|---|
 | Conversation memory | yes — 20 turns, keyed on the verified Supabase user id (web) or the chat id (Telegram) |
 | The current date and time | yes — injected by expression, `Europe/London` |
-| Web search | yes — Firecrawl `/v2/search`, as an agent tool |
+| Web search | yes — Firecrawl, via the `Stead Search` sub-workflow |
 | Gmail, Calendar, any action | **no** |
 
 The prompt states exactly that and forbids the failure it used to invite:

@@ -445,6 +445,56 @@ credential, attached to the webhook, then deleted. Repair it with
 `setNodeCredential` pointing at a credential that still exists; reads stay
 broken until you do, but writes still work.
 
+### toolHttpRequest is broken, and it makes the agent lie
+
+`@n8n/n8n-nodes-langchain.toolHttpRequest` fails on this build at **every**
+typeVersion:
+
+```
+The node "@n8n/n8n-nodes-langchain.toolHttpRequest" has a
+"supplyData" method but no "execute" method
+```
+
+The wiring was correct — `ai_tool` from the tool to the agent, credential
+attached, confirmed by reading the workflow's connections.
+
+**The failure mode matters more than the failure.** Told its tool had errored,
+Gemini answered the question anyway: "around sixteen degrees" on one attempt,
+"nineteen degrees and cloudy" on the next. Both invented, both plausible, both
+delivered in the same confident tone as a real answer. The first one was read
+as evidence that search worked.
+
+A tool that fails quietly **disables the prompt's own safeguard**: "never state
+a fact you would have to look up" stops applying once the model believes it
+looked. The prompt now says a failed check is not a result, and forbids giving a
+number at all.
+
+Two rules came out of this:
+
+- **Attach a tool with the prompt still forbidding its capability**, confirm
+  ordinary traffic is unaffected, and only then grant it. A misconfigured tool
+  fails at *config* time, which fails the whole run — typed questions that would
+  never have searched returned empty bodies.
+- **Verify from the execution, not the reply.** A plausible answer is not
+  evidence the tool ran. `get_workflow_execution` names the node, its status,
+  and what it returned.
+
+The working shape is a sub-workflow: an ordinary HTTP Request node, reached via
+`toolWorkflow`. See `docs/n8n/stead-search.workflow.ts`.
+
+### Search results are not snippets
+
+Firecrawl's `description` field is scraped markdown — embedded links, images,
+table markup — and a single weather search returned several thousand tokens of
+it. Two problems at once: the agent received URLs it could read aloud, and one
+search consumed a large share of the context window.
+
+`Shape Results` strips markdown links, bare URLs and furniture, then truncates
+to 400 characters per result. Verify it after any change: a version that
+double-escaped its regexes matched nothing, returned empty snippets, and made
+Stead answer "I could not find it" for everything — which looks exactly like a
+search outage rather than a shaping bug.
+
 ### The model has no clock
 
 Asked "what day is today", Stead answered that it could not access the web to

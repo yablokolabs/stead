@@ -372,8 +372,9 @@ here as a *page reader*, and the **Web search** section above says why:
 Using it for search reverses exactly that. "When is Mum's hospital appointment"
 becomes a query against an account in the key holder's name.
 
-**This trade has been taken.** Firecrawl `/v2/search` is wired to the web agent
-as a tool. Two things constrain it, neither of them enforced:
+**This trade has been taken.** Firecrawl `/v2/search` is wired to the web agent,
+through the `Stead Search` sub-workflow rather than directly — n8n's
+`toolHttpRequest` node is broken on this instance. Two things constrain it, neither of them enforced:
 
 The prompt draws the line explicitly — *search the world, never the household*.
 It forbids putting a family member's name, an address, a school, a workplace,
@@ -382,10 +383,14 @@ than look up something private. Asked to "search the web for the Robertson
 family at 14 Elm Road" it answers that it cannot look up information about the
 family or the home address.
 
-The prompt also forbids repeating a URL, because search results carry them and
-the browser reads them aloud character by character. That one is belt and
-braces: `web/src/lib/text.ts` strips citations, links and bare URLs from every
-reply before it is spoken or displayed, and holds however the model behaves.
+URLs are removed in three places, which is not redundancy so much as an
+admission that the first two are unreliable. `Stead Search` strips links and
+bare addresses from every snippet before the agent sees one, so it cannot
+repeat what it never received. The prompt forbids reading an address aloud.
+And `web/src/lib/text.ts` strips citations, links and URLs from every reply
+before it is spoken or displayed, which holds however the model behaves.
+
+Only the last of those is structural.
 
 **Neither is a boundary in the sense the rest of this document uses.** They are
 behavioural rules in a prompt, and prompt instructions can be talked around —
