@@ -244,10 +244,14 @@ A fresh `pages.dev` hostname returns **522 for the first minute or so** while
 the edge provisions, even though asset paths already answer 200. That is not a
 failed deploy.
 
-**If you want Git integration instead**, delete the project and create it
-through the dashboard: Workers & Pages → Create → Pages → Connect to Git →
+Every deploy prints a warning about `pages_build_output_dir` missing from
+`wrangler.jsonc`. Ignore it: that field is for Pages projects that keep their
+own config file, and this repo's `wrangler.jsonc` belongs to the **Worker**.
+Adding it would point Pages at the Worker's configuration.
 
-Workers & Pages → Create → Pages → Connect to Git → `yablokolabs/stead-preview`:
+**If you want Git integration instead**, delete the project and recreate it
+through the dashboard: Workers & Pages → Create → Pages → Connect to Git →
+`yablokolabs/stead-preview`:
 
 | Setting | Value |
 |---|---|

@@ -181,15 +181,22 @@ cd ../worker && npx wrangler pages dev ../web/dist --port 8790
 
 ## Configuration
 
-### Browser (`web/.env.local`, and Pages build variables)
+### Browser (`web/.env.local`)
 
 Everything here is compiled into the bundle and is **public**.
+
+There are **no Pages environment variables**. The live project is direct upload,
+so Cloudflare never runs a build — whatever `npm run build` produced on the
+deploying machine is what ships. That makes `web/.env.local` production
+configuration, not a local convenience, and nothing prevents a bundle pointed at
+`localhost` reaching the live site. The runbook has a `curl` that checks the
+deployed bundle for the gateway address.
 
 | Variable | Example | Notes |
 |---|---|---|
 | `VITE_SUPABASE_URL` | `https://lzzrpzdjzybpvykspxiy.supabase.co` | |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` | Publishable or legacy anon key. **Never** the service-role key. |
-| `VITE_STEAD_API_URL` | `http://localhost:8788` | Worker origin. Production: the Worker's route. |
+| `VITE_STEAD_API_URL` | `https://stead-gateway.young-disk-9d1c.workers.dev` | Worker origin. `http://localhost:8788` for local development only. |
 
 A missing variable renders an on-screen explanation naming it, rather than a
 blank page.
