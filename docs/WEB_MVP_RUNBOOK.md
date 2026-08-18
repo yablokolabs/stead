@@ -118,10 +118,9 @@ field notes for why it was abandoned twice in one afternoon.
   a Sarvam API key. Drives transcription on both workflows and synthesis on
   Telegram.
 
-Use a Sarvam key **issued for Stead**. The one currently in use came from
-`~/.hermes/.env`, which is Polaris's profile; if Stead's traffic gets it
-rate-limited, Polaris loses its voice. `SECURITY.md` argues against exactly
-this.
+Use a Sarvam key **issued for Stead**, not Polaris's from `~/.hermes/.env`.
+Sarvam rate-limits per key, so a shared one means Stead's traffic can silence
+Polaris, and revoking either revokes both.
 
 **Create the Header Auth credential.** This is the shared secret between the
 Worker and n8n, and it is the single most error-prone step in the whole build.
@@ -573,11 +572,10 @@ No OpenAI anywhere. Sarvam is a Header Auth credential (`api-subscription-key`)
 on an HTTP Request node; Gemini uses the `googlePalmApi` credential; speech is
 free and local to the device.
 
-Note the credential provenance: the Sarvam key currently in use came from
-`~/.hermes/.env`, which is **Polaris's** profile, not Stead's. `SECURITY.md`
-argues against exactly this — if Stead's traffic gets that key rate-limited,
-Polaris loses its voice. A second key from the same Sarvam account, owned by
-Stead, closes it at no cost.
+The Sarvam key here started as Polaris's, taken from `~/.hermes/.env`. A
+separate key has since been issued, so the two systems no longer share one — but
+note that **two Sarvam keys now exist in two places**: one in the n8n credential
+store, one on the Hermes host. Rotating either does not rotate the other.
 
 ### Gemini transcription does not work as a drop-in
 
