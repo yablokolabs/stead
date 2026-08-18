@@ -16,12 +16,12 @@ Stead has two, and they currently coexist rather than one replacing the other.
 | | Private preview | Web MVP |
 |---|---|---|
 | Reached by | Telegram | browser, installable to a home screen |
-| Runs on | this VM, `systemd --user` | Cloudflare Pages + Cloudflare Worker |
-| Agent | Hermes profile `stead-kerstin-demo` | n8n Cloud |
-| State | local SQLite, mode 600 | Supabase |
+| Runs on | this VM, `systemd --user` | Cloudflare Pages + Worker — **nothing on this VM** |
+| Agent | Hermes profile `stead-kerstin-demo` | n8n Cloud — Google Gemini |
+| State | local SQLite, mode 600 | n8n conversation memory — Supabase is identity only |
 | Identity | allow-listed Telegram IDs | Supabase Auth |
-| Voice | yes — Sarvam in, Edge out (British) | push to talk — Whisper in, the device's own voice out (`en-GB`) |
-| Status | working; this is what gets demonstrated | text and voice both working |
+| Voice | yes — Sarvam in, Edge out (British) | push to talk — Sarvam in, the device's own voice out (`en-GB`) |
+| Status | working; this is what gets demonstrated | text and voice working; no web search |
 
 Everything below this section describes the **private preview**. It is the
 working product and is unaffected by the web path.
