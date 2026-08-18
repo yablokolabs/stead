@@ -743,13 +743,24 @@ complexity lives, and this architecture deliberately did not buy it.
 
 Remaining levers, largest first:
 
-- **A real OpenAI key** — removes the proxy hop, its variance and its 500s, and
-  unblocks a faster transcription model. See the field note.
-- **Turn web search off** — removes the remaining search cost, at the cost of a
-  genuinely useful capability.
 - **Show the transcript as soon as it exists** — changes nothing measurable,
-  changes the experience a lot. Needs streaming or two round trips.
-- **Take voice out of n8n entirely** — ~1–1.5 s, and a real project.
+  changes the experience a great deal. Needs streaming or two round trips, and
+  n8n's Respond to Webhook is all-or-nothing.
+- **A licensed voice.** Browser synthesis was tested and judged robotic, and no
+  ranking fixes that — `speechSynthesis` plays whatever the operating system
+  installed. Azure `en-GB-RyanNeural` is the fix `ARCHITECTURE.md` already
+  names, free up to 0.5M characters a month, about 3,300 replies. It would make
+  the web app and the Hermes preview sound identical for the first time. Against
+  it: browser synthesis is the only arrangement where a household's replies are
+  never spoken by someone else's servers.
+- **Turn web search off** — removes the search round trip on the turns that use
+  it, at the cost of a genuinely useful capability.
+- **A faster model** — moves the floor set by the agent itself.
+- **Take voice out of n8n entirely** — ~1–1.5 s, and a real project rather than
+  a tweak.
+
+The OpenAI key that used to head this list is gone from the architecture
+entirely. Nothing in either workflow touches OpenAI now.
 
 ## Verifying the whole path
 
