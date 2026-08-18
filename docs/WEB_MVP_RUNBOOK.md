@@ -445,6 +445,22 @@ credential, attached to the webhook, then deleted. Repair it with
 `setNodeCredential` pointing at a credential that still exists; reads stay
 broken until you do, but writes still work.
 
+### The model has no clock
+
+Asked "what day is today", Stead answered that it could not access the web to
+look up the date. Two different things were tangled in that: it genuinely has
+no web search, and it genuinely has no clock — but the date is not a web
+lookup, and n8n knows it.
+
+The system message is now an **expression** (leading `=`) carrying
+`{{ $now.setZone('Europe/London').toFormat('cccc d LLLL yyyy, HH:mm') }}`.
+Verified: "It is Tuesday, 18 August 2026", and "There are three days until
+Friday, August 21" — correct arithmetic, while still refusing the weather,
+which really is a lookup.
+
+Anything else the agent should know but cannot derive — the household's
+members, a standing schedule — belongs in the same place.
+
 ### Whisper invents words; Sarvam does not
 
 Given a 1.5-second 180 Hz sine tone with no speech in it whatsoever:
