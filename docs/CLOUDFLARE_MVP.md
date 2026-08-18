@@ -30,11 +30,17 @@ not. Start there if you are recovering rather than reading.
                        │
                        ▼
                    n8n Cloud
-                   Stead agent
-                       │
-                       ▼
-                   Supabase
+                   Stead agent — Gemini
+                   speech in — Sarvam
 ```
+
+Supabase is the identity provider and nothing else: the Worker verifies its
+tokens, and the browser signs in against it. Nothing writes household data to
+it yet — conversation memory lives in n8n, keyed on the verified user id.
+
+**Nothing in the deployed system touches any VM.** It is n8n Cloud, Supabase
+and Cloudflare. That rules out the local SearXNG the Python preview relies on,
+which is why the agent has no web search — see below.
 
 ## Why a Worker sits in the middle
 
@@ -291,8 +297,8 @@ Success is `200`:
 
 **The reply is spoken by the browser, not the server.** `speechSynthesis`
 starts immediately, costs nothing, and honours `lang: en-GB`. Server-side
-`tts-1` was removed: it added ~3 s per turn and a base64 payload a third larger
-than the audio, and nothing could play until the whole file had arrived.
+synthesis was removed: it added ~3 s per turn and a base64 payload a third
+larger than the audio, and nothing could play until the whole file arrived.
 
 The gateway still *accepts* `audio_base64` / `audio_mime` in case the agent
 sends audio one day, and the frontend prefers it when present. The media type
@@ -307,15 +313,19 @@ shares nothing with it beyond the OpenAI credential.
 
 ```
 Webhook (Header Auth) ─▶ Normalise ─▶ Spoken?
-    ├─ yes: Decode Audio ─▶ Whisper ─▶ Prompt From Speech ─┐
-    └─ no:  Prompt From Text ───────────────────────────────┤
-                                                            ▼
-                                             Stead Web Agent (gpt-5-mini)
-                                             memory keyed on the Supabase user id
-                                                            │
-                                                      Reply Aloud?
-                                        ├─ yes: tts-1 ─▶ Encode ─▶ Respond
-                                        └─ no:  ──────────────────▶ Respond
+    ├─ yes: Decode Audio ─▶ Sarvam STT ─▶ Heard Anything?
+    │                                       ├─ no  ─▶ "I didn't catch that"
+    │                                       └─ yes ─▶ Prompt From Speech ─┐
+    └─ no:  Prompt From Text ──────────────────────────────────────────────┤
+                                                                           ▼
+                                                    Stead Web Agent (Gemini flash-lite)
+                                                    memory keyed on the Supabase user id
+                                                                           │
+                                                                    Spoken Turn?
+                                                   ├─ yes ─▶ Voice Reply ─▶ Respond
+                                                   └─ no  ─▶ Text Reply  ─▶ Respond
+
+No text-to-speech in the workflow at all — the browser speaks. See below.
 ```
 
 What the Worker sends:
@@ -374,54 +384,56 @@ What the agent actually has:
 | | |
 |---|---|
 | Conversation memory | yes — 20 turns, keyed on the verified Supabase user id (web) or the chat id (Telegram) |
-| Web search | yes — OpenAI's built-in search via the Responses API |
-| Gmail | **no** |
-| Calendar | **no** |
-| Any other action | **no** |
+| The current date and time | yes — injected by expression, `Europe/London` |
+| Web search | **no** |
+| Gmail, Calendar, any action | **no** |
 
 The prompt states exactly that and forbids the failure it used to invite:
 describing what an inbox or diary contains, or claiming something was added,
-moved, cancelled, booked or sent. The previous prompt devoted a section to
-"check Calendar", "search Gmail" and "create Calendar event if authorised" while
-no tool node was connected to either agent — an assistant told to use tools it
-does not have will describe results it did not get.
+moved, cancelled, booked or sent.
 
-Two traps found while fixing this, both worth knowing:
+**The date is not a lookup.** An earlier version of this prompt made Stead
+answer "I cannot access the web to look up the date". The model has no clock;
+n8n does. The system message is an *expression* carrying `$now`, so Stead knows
+what day it is and can do arithmetic on it — while still refusing the weather,
+which genuinely is a lookup.
 
-- `builtInTools` is silently ignored unless `responsesApiEnabled` is also true.
-  Setting one without the other yields a prompt that promises search and an
-  agent that has none — the same fault, reintroduced by configuration.
-- Web search here is **not** the Python preview's search. `SECURITY.md` explains
-  at length why queries go to a local SearXNG: so a household's questions do not
-  reach a vendor. OpenAI's built-in search has no such property — the query goes
-  to OpenAI. The prompt tells the agent not to put personal details in a query,
-  which is a behavioural rule, not an enforced boundary.
+**There is no web search, and no local option for one.** The deployed system
+touches nothing on any VM: it is n8n Cloud, Supabase and Cloudflare. So the
+`SECURITY.md` design — queries confined to a SearXNG on loopback — has nowhere
+to run. n8n's `toolSearXng` node exists and would work, but only against a
+publicly reachable instance, and public SearXNG instances disable the JSON API
+that node needs. Adding search therefore means a vendor sees household queries,
+which is precisely what the Python preview was built to avoid. That is a
+decision to take deliberately, not to drift into.
 
 ### Where speech happens
 
-Three different places, for three different reasons.
+| | Telegram preview (Python) | Web MVP | `Stead Telegram` (n8n) |
+|---|---|---|---|
+| Hears | Sarvam Saaras | Sarvam `saarika:v2.5` | Sarvam `saarika:v2.5` |
+| Speaks | Edge `en-GB-RyanNeural` | the browser, `lang: en-GB` | Sarvam `bulbul:v3`, `ratan` |
 
-| | Telegram preview | Web MVP |
-|---|---|---|
-| Hears | Sarvam Saaras | OpenAI Whisper, in n8n |
-| Speaks | Edge `en-GB-RyanNeural` | the browser's own `speechSynthesis` |
+`ARCHITECTURE.md` explains the British-voice requirement at length. The web MVP
+honours it the cheapest possible way: `speechSynthesis` obeys `lang: en-GB`, so
+the device picks a British voice, no audio crosses the network, and nothing is
+billed. Voices are ranked — British over other English, `Natural`/`Neural`
+names above the rest, male over female, since the documented choice was
+`en-GB-Ryan`.
 
-`ARCHITECTURE.md` explains the Telegram choice at length: Sarvam has no British
-voice, and Stead serves a British household.
+`Stead Telegram` cannot do that: there is no browser, so it must synthesise
+server-side. Sarvam's TTS accepts only Indian locales — `en-IN` is its sole
+English — so `ratan` is male but not British. Accepted, because that workflow is
+a test harness rather than a user surface.
 
-The web MVP briefly used OpenAI `tts-1` with the voice `alloy` — not British,
-and a third speech vendor. Moving synthesis into the browser removed that
-divergence as a side effect of removing 3 s of latency: `speechSynthesis`
-honours `lang: en-GB`, so most devices choose a British voice, and no audio
-crosses the network at all.
+**Transcription is Sarvam on both.** It is faster than Whisper and more honest:
+given a sine tone containing no speech, Whisper returned the word "You" in
+1,851 ms and Sarvam returned nothing in 1,182 ms. An empty transcript is then
+caught by `Heard Anything?` rather than handed to a model that will fill the
+gap.
 
-**Transcription is still OpenAI.** Household audio reaches a vendor
-`SECURITY.md` does not list among its egress edges, and it runs on the `n8n
-free OpenAI API credits` credential, which is a finite trial pool. Both are
-worth closing before real households.
-
-Whisper is primed with Stead's name — see the runbook's field note on "He's
-dead" for why that is not optional.
+No OpenAI anywhere. It was tried and abandoned twice in one afternoon — see the
+runbook's field notes on the free-credit pool and on keys that are not balances.
 
 ## Deployment
 
