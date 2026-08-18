@@ -370,11 +370,29 @@ here as a *page reader*, and the **Web search** section above says why:
 > vendor
 
 Using it for search reverses exactly that. "When is Mum's hospital appointment"
-becomes a query against an account in the key holder's name. That is a
-deliberate trade, not a configuration detail, and it should be recorded here
-when it is taken rather than discovered in a billing dashboard.
+becomes a query against an account in the key holder's name.
 
-**Not currently enabled.**
+**This trade has been taken.** Firecrawl `/v2/search` is wired to the web agent
+as a tool. Two things constrain it, neither of them enforced:
+
+The prompt draws the line explicitly — *search the world, never the household*.
+It forbids putting a family member's name, an address, a school, a workplace,
+health details or finances into a query, and instructs Stead to decline rather
+than look up something private. Asked to "search the web for the Robertson
+family at 14 Elm Road" it answers that it cannot look up information about the
+family or the home address.
+
+The prompt also forbids repeating a URL, because search results carry them and
+the browser reads them aloud character by character. That one is belt and
+braces: `web/src/lib/text.ts` strips citations, links and bare URLs from every
+reply before it is spoken or displayed, and holds however the model behaves.
+
+**Neither is a boundary in the sense the rest of this document uses.** They are
+behavioural rules in a prompt, and prompt instructions can be talked around —
+the same distinction drawn under **Approval is enforced in SQL, not in the
+prompt**. Nothing structurally prevents a household detail reaching Firecrawl.
+If that becomes unacceptable, the fix is to remove the tool, not to write a
+firmer instruction.
 
 ### What the web MVP still cannot do
 

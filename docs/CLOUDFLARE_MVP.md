@@ -385,7 +385,7 @@ What the agent actually has:
 |---|---|
 | Conversation memory | yes — 20 turns, keyed on the verified Supabase user id (web) or the chat id (Telegram) |
 | The current date and time | yes — injected by expression, `Europe/London` |
-| Web search | **no** |
+| Web search | yes — Firecrawl `/v2/search`, as an agent tool |
 | Gmail, Calendar, any action | **no** |
 
 The prompt states exactly that and forbids the failure it used to invite:
@@ -398,16 +398,20 @@ n8n does. The system message is an *expression* carrying `$now`, so Stead knows
 what day it is and can do arithmetic on it — while still refusing the weather,
 which genuinely is a lookup.
 
-**There is no web search, and no local option for one.** The deployed system
-touches nothing on any VM: it is n8n Cloud, Supabase and Cloudflare. So the
-`SECURITY.md` design — queries confined to a SearXNG on loopback — has nowhere
-to run. n8n's `toolSearXng` node exists and would work, but only against a
-publicly reachable instance, and public SearXNG instances disable the JSON API
-that node needs. Adding search therefore means a vendor sees household queries,
-which is precisely what the Python preview was built to avoid. `SECURITY.md`
-now carries that trade-off in full under **There is no web search, and adding
-one has a price** — read it before enabling Firecrawl's `/v2/search`, which is
-otherwise the obvious candidate since a key already exists.
+**Search reaches a vendor, and that was a decision.** The deployed system
+touches nothing on any VM, so the `SECURITY.md` design — queries confined to a
+SearXNG on loopback — has nowhere to run. n8n's `toolSearXng` node would work
+but only against a publicly reachable instance, and public SearXNG instances
+disable the JSON API it needs. So search is Firecrawl, and household queries
+now reach an account in the key holder's name. `SECURITY.md` carries the full
+trade-off; read it before widening what Stead is allowed to look up.
+
+Two n8n traps cost a broken deployment here. `toolHttpRequest` lists
+`httpBearerAuth` in its type definition and **rejects it at runtime** — the
+credential has to be Header Auth carrying `Authorization: Bearer …`. And a
+misconfigured tool fails at config time, which fails the *entire run*: typed
+questions that would never have searched returned empty until it was reverted.
+Attach a tool, prove it harmless, and only then let the prompt advertise it.
 
 ### Where speech happens
 
