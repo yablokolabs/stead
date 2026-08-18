@@ -31,7 +31,32 @@ Everything the web path depends on, as of 2026-08-17.
 | Pages project | **not created yet** | |
 | Custom domain | **not configured** | |
 
-The Telegram/Hermes preview shares none of this. See the top of `README.md`.
+### The `Stead Telegram` workflow
+
+Separate from the Python/Hermes preview, and separate from the web path, but it
+shares this instance's credentials — which is how it got taken down twice in one
+session. It is a **test harness, not a user surface**, so it is allowed to sound
+different from the web app.
+
+| Node | Provider |
+|---|---|
+| `Transcribe Audio` | Sarvam `saarika:v2.5`, HTTP Request, `Sarvam` credential |
+| `Voice LLM`, `Text LLM` | Gemini `models/gemini-3.1-flash-lite` |
+| `Generate Speech` | Sarvam `bulbul:v3`, speaker `ratan`, `en-IN` |
+| `Decode Reply Audio` | `convertToFile` on `audios[0]` — Sarvam returns base64, Telegram needs binary |
+
+`Stead (Voice)` reads `{{ $json.transcript }}`, Sarvam's field, not Whisper's
+`text`.
+
+**Its voice is not British.** Sarvam's TTS accepts only Indian locales — `en-IN`
+is the sole English option — so `ratan` is male but Indian-accented.
+`ARCHITECTURE.md` records the British voice in the Hermes preview as Edge's
+`en-GB-RyanNeural`; Sarvam's `ratan` was registered there but never selected.
+The web app avoids this entirely by speaking in the browser, where `en-GB` is
+honoured.
+
+The Telegram/Hermes *Python* preview shares none of this. See the top of
+`README.md`.
 
 ---
 
@@ -85,9 +110,18 @@ it, something is wrong with the design rather than with your permissions.
 
 ### 2. n8n
 
-**Create the OpenAI credential** if it does not exist. The current workflows use
-`n8n free OpenAI API credits`, which is a finite trial pool — swap it for a real
-OpenAI credential before anything depends on it.
+**Create two credentials.** Neither workflow uses OpenAI any more — see the
+field notes for why it was abandoned twice in one afternoon.
+
+- **Google Gemini** (`googlePalmApi`) — the agent on both workflows.
+- **Sarvam** — a **Header Auth** credential, name `api-subscription-key`, value
+  a Sarvam API key. Drives transcription on both workflows and synthesis on
+  Telegram.
+
+Use a Sarvam key **issued for Stead**. The one currently in use came from
+`~/.hermes/.env`, which is Polaris's profile; if Stead's traffic gets it
+rate-limited, Polaris loses its voice. `SECURITY.md` argues against exactly
+this.
 
 **Create the Header Auth credential.** This is the shared secret between the
 Worker and n8n, and it is the single most error-prone step in the whole build.
@@ -107,9 +141,12 @@ It cost four round trips.
 
 **Create the workflow** from `docs/n8n/stead-web.workflow.ts` using the n8n MCP
 tools — `validate_workflow`, then `create_workflow_from_code`, then
-`publish_workflow`. Attach the Header Auth credential to the Webhook node and
-the OpenAI credential to `Transcribe Voice Note`, `Stead Web Model` and
-`Generate Speech`.
+`publish_workflow`. Then attach credentials by hand, because
+`create_workflow_from_code` skips HTTP Request nodes entirely:
+
+- webhook secret → `Stead Web Webhook`
+- `Sarvam` → `Transcribe Voice Note`
+- Gemini → `Stead Web Model`
 
 **Activate it**, then copy the *production* webhook URL (`/webhook/…`, not
 `/webhook-test/…`).
