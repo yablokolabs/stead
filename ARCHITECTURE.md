@@ -1,5 +1,9 @@
 # Architecture
 
+![System Architecture](docs/diagrams/architecture.mmd)
+![Voice Processing Pipeline](docs/diagrams/voice-pipeline.mmd)
+![Data Flow](docs/diagrams/data-flow.mmd)
+
 ```
 Kerstin
   └─ Telegram — private "Stead Preview" bot, allow-listed to her ID
