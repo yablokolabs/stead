@@ -413,52 +413,41 @@ const respondText = node({
 });
 
 /**
- * Search, and the two traps that cost a broken deployment.
+ * Search runs in a sub-workflow, and that is not a style choice.
  *
- * `toolHttpRequest` lists `httpBearerAuth` among its `genericAuthType` values
- * and REJECTS IT AT RUNTIME — "The type httpBearerAuth is not supported". The
- * credential must be Header Auth carrying `Authorization: Bearer fc-…`.
+ * `toolHttpRequest` is broken on this n8n build — "has a supplyData method but
+ * no execute method", at typeVersion 1 and 1.1 alike, with correct ai_tool
+ * wiring and an attached credential. See docs/n8n/stead-search.workflow.ts.
  *
- * And a misconfigured tool fails at CONFIG time, which fails the whole run: the
- * agent resolves its tools before doing anything, so typed questions that would
- * never have searched returned empty bodies until this was reverted. Attach a
- * tool, prove it harmless, then let the prompt advertise it — in that order.
- *
- * Household queries now reach a vendor account. SECURITY.md carries what that
- * costs and why the prompt's "search the world, never the household" rule is
- * not a boundary in the sense the rest of that document means.
+ * The failure mode is what makes it dangerous rather than merely broken. Told
+ * the tool had errored, Gemini answered anyway: "around sixteen degrees" once,
+ * "nineteen degrees and cloudy" the next time, both invented. A tool that fails
+ * quietly disables the prompt's own safeguard, because "never state a fact you
+ * would have to look up" stops applying once the model believes it looked. The
+ * prompt now says explicitly that a failed check is not a result.
  */
-const searchTheWeb = tool({
-  type: '@n8n/n8n-nodes-langchain.toolHttpRequest',
-  version: 1.1,
+const searchTheWeb = node({
+  type: '@n8n/n8n-nodes-langchain.toolWorkflow',
+  version: 2.2,
   config: {
     name: 'Search The Web',
     parameters: {
-      toolDescription:
-        'Search the public web for something happening in the world right now — news, weather, opening times, prices, travel. Returns a handful of results, each with a title, a URL and a short snippet. Use it only when the answer depends on current information the household has not told you. Never search for anything about this household; that is private.',
-      method: 'POST',
-      url: 'https://api.firecrawl.dev/v2/search',
-      authentication: 'genericCredentialType',
-      genericAuthType: 'httpHeaderAuth',
-      sendBody: true,
-      specifyBody: 'json',
-      jsonBody: '{"query": "{query}", "limit": 5}',
-      placeholderDefinitions: {
-        values: [
-          {
-            name: 'query',
-            description:
-              'What to search for, phrased as you would type it into a search engine. Never include household names, addresses, health details or anything private.',
-            type: 'string',
-          },
+      description:
+        'Search the public web for something happening in the world right now — weather, news, opening times, prices, travel. Returns titles and short snippets. Never search for anything about this household; that is private.',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: 'wyT4v1sJEP1YxH6Q', cachedResultName: 'Stead Search' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: {
+          query:
+            "={{ $fromAI('query', 'What to search for, phrased as you would type it into a search engine. Never include household names, addresses, health details or anything private.', 'string') }}",
+        },
+        matchingColumns: [],
+        schema: [
+          { id: 'query', displayName: 'query', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
         ],
       },
-      optimizeResponse: true,
-      responseType: 'json',
-      // Firecrawl v2 returns { success, data: { web: [...] } }.
-      dataField: 'data.web',
     },
-    credentials: { httpHeaderAuth: newCredential('Firecrawl') },
     position: [1180, 620],
   },
 });
