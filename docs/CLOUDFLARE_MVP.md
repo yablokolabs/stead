@@ -428,11 +428,28 @@ Attach a tool, prove it harmless, and only then let the prompt advertise it.
 | Speaks | Edge `en-GB-RyanNeural` | the browser, `lang: en-GB` | Sarvam `bulbul:v3`, `ratan` |
 
 `ARCHITECTURE.md` explains the British-voice requirement at length. The web MVP
-honours it the cheapest possible way: `speechSynthesis` obeys `lang: en-GB`, so
-the device picks a British voice, no audio crosses the network, and nothing is
-billed. Voices are ranked — British over other English, `Natural`/`Neural`
-names above the rest, male over female, since the documented choice was
-`en-GB-Ryan`.
+honours the *accent* the cheapest possible way: `speechSynthesis` obeys
+`lang: en-GB`, so the device picks a British voice, no audio crosses the
+network, and nothing is billed. Voices are ranked — British over other English,
+`Natural`/`Neural` names above the rest, male over female, since the documented
+choice was `en-GB-Ryan`.
+
+**It does not honour the quality, and this was tested.** The result was judged
+robotic in practice and accepted as good enough for the demo rather than
+solved. Ranking cannot help: `speechSynthesis` plays whatever the operating
+system installed, and no selection logic conjures a voice that is not there.
+
+The fix, when it matters, is the one `ARCHITECTURE.md` already names — Azure
+Speech carries the same `en-GB-RyanNeural` the Hermes preview uses, which would
+finally make both halves of Stead sound identical. Azure's free tier is **0.5
+million characters a month**, and a Stead reply runs about 150 characters, so
+roughly 3,300 spoken replies monthly at no cost. That is far beyond one
+household. It is an HTTP Request node in the same shape as the Sarvam one, plus
+a key and a region.
+
+Weigh one thing against it: browser synthesis is the only arrangement where the
+household's replies are never spoken by a third party's servers. Every
+alternative sends the text somewhere.
 
 `Stead Telegram` cannot do that: there is no browser, so it must synthesise
 server-side. Sarvam's TTS accepts only Indian locales — `en-IN` is its sole
