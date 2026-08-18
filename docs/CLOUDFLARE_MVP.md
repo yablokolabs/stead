@@ -443,7 +443,20 @@ runbook's field notes on the free-credit pool and on keys that are not balances.
 
 ## Deployment
 
-### Pages, connected to Git
+### Pages — live at https://stead-preview.pages.dev
+
+The live project is **direct upload**, deployed with `wrangler pages deploy`,
+because a testable URL on a phone was worth more than CI integration on the day.
+That choice is one-way: a direct-upload project can never be connected to a
+repository afterwards. Recreating it through the dashboard is the only route to
+Git integration, and the settings for that are below.
+
+Because there is no build step on Cloudflare's side, the `VITE_*` values come
+from whichever machine ran `npm run build`. There are no Pages environment
+variables to set, and no protection against deploying a bundle pointed at
+`localhost`.
+
+### If you switch to Git
 
 Cloudflare dashboard → Workers & Pages → Create → Pages → Connect to Git →
 `yablokolabs/stead-preview`:

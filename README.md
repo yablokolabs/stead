@@ -15,7 +15,7 @@ Stead has two, and they currently coexist rather than one replacing the other.
 
 | | Private preview | Web MVP |
 |---|---|---|
-| Reached by | Telegram | browser, installable to a home screen |
+| Reached by | Telegram | https://stead-preview.pages.dev — installable to a home screen |
 | Runs on | this VM, `systemd --user` | Cloudflare Pages + Worker — **nothing on this VM** |
 | Agent | Hermes profile `stead-kerstin-demo` | n8n Cloud — Google Gemini |
 | State | local SQLite, mode 600 | n8n conversation memory — Supabase is identity only |

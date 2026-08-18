@@ -28,7 +28,7 @@ Everything the web path depends on, as of 2026-08-17.
 | Agent model | Google Gemini `models/gemini-3.1-flash-lite` | credential `Google Gemini(PaLM) Api account` |
 | Transcription | Sarvam `saarika:v2.5` | credential `Sarvam` (Header Auth, `api-subscription-key`) |
 | n8n webhook | `https://yablokolabs.app.n8n.cloud/webhook/stead-web` | |
-| Pages project | **not created yet** | |
+| Pages project | `stead-preview` | `https://stead-preview.pages.dev` — **direct upload, not Git-connected** |
 | Custom domain | **not configured** | |
 
 ### The `Stead Telegram` workflow
@@ -216,9 +216,37 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$U/api/stead" \
 
 ### 4. Cloudflare Pages
 
-**Create it through the dashboard, connected to Git.** A project created by
-`wrangler pages deploy` is a *direct upload* project and can never afterwards be
-connected to a repository — converting means deleting and recreating it.
+**The live project is direct upload, not Git-connected.** That was a deliberate
+trade to get a testable URL onto a phone quickly, and it is one-way: a project
+created by `wrangler pages deploy` can never afterwards be connected to a
+repository. Converting means deleting `stead-preview` and recreating it through
+the dashboard.
+
+To deploy the current build:
+
+```bash
+cd web && npm run build          # bakes VITE_* from .env.local
+cd ../worker
+npx wrangler pages deploy ../web/dist --project-name stead-preview \
+  --branch main --commit-dirty=true
+```
+
+The `VITE_*` values are compiled into the bundle at build time, so **the
+deploying machine's `web/.env.local` decides what the live site talks to**.
+There are no Pages environment variables on a direct-upload project — check
+`web/.env.local` before every deploy, or verify afterwards:
+
+```bash
+curl -s https://stead-preview.pages.dev/assets/index-*.js \
+  | grep -oE 'https://stead-gateway[a-z0-9.-]*workers\.dev'
+```
+
+A fresh `pages.dev` hostname returns **522 for the first minute or so** while
+the edge provisions, even though asset paths already answer 200. That is not a
+failed deploy.
+
+**If you want Git integration instead**, delete the project and create it
+through the dashboard: Workers & Pages → Create → Pages → Connect to Git →
 
 Workers & Pages → Create → Pages → Connect to Git → `yablokolabs/stead-preview`:
 
