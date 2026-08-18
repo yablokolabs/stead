@@ -404,8 +404,10 @@ touches nothing on any VM: it is n8n Cloud, Supabase and Cloudflare. So the
 to run. n8n's `toolSearXng` node exists and would work, but only against a
 publicly reachable instance, and public SearXNG instances disable the JSON API
 that node needs. Adding search therefore means a vendor sees household queries,
-which is precisely what the Python preview was built to avoid. That is a
-decision to take deliberately, not to drift into.
+which is precisely what the Python preview was built to avoid. `SECURITY.md`
+now carries that trade-off in full under **There is no web search, and adding
+one has a price** — read it before enabling Firecrawl's `/v2/search`, which is
+otherwise the obvious candidate since a key already exists.
 
 ### Where speech happens
 
