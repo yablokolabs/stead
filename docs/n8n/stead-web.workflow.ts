@@ -25,6 +25,7 @@ import {
   ifElse,
   languageModel,
   memory,
+  tool,
   expr,
   nodeJson,
   sticky,
@@ -323,7 +324,7 @@ const steadAgent = node({
       text: expr('{{ $json.prompt }}'),
       options: { systemMessage: STEAD_PROMPT, maxIterations: 10, enableStreaming: false },
     },
-    subnodes: { model: steadModel, memory: steadMemory },
+    subnodes: { model: steadModel, memory: steadMemory, tools: [searchTheWeb] },
     position: [1320, 300],
   },
   output: [{ output: 'Nothing in the diary tomorrow.' }],
@@ -409,6 +410,57 @@ const respondText = node({
   version: 1.1,
   config: { name: 'Respond With Text', parameters: { respondWith: 'firstIncomingItem', options: {} }, position: [1980, 420] },
   output: [{ reply: 'Nothing in the diary tomorrow.' }],
+});
+
+/**
+ * Search, and the two traps that cost a broken deployment.
+ *
+ * `toolHttpRequest` lists `httpBearerAuth` among its `genericAuthType` values
+ * and REJECTS IT AT RUNTIME — "The type httpBearerAuth is not supported". The
+ * credential must be Header Auth carrying `Authorization: Bearer fc-…`.
+ *
+ * And a misconfigured tool fails at CONFIG time, which fails the whole run: the
+ * agent resolves its tools before doing anything, so typed questions that would
+ * never have searched returned empty bodies until this was reverted. Attach a
+ * tool, prove it harmless, then let the prompt advertise it — in that order.
+ *
+ * Household queries now reach a vendor account. SECURITY.md carries what that
+ * costs and why the prompt's "search the world, never the household" rule is
+ * not a boundary in the sense the rest of that document means.
+ */
+const searchTheWeb = tool({
+  type: '@n8n/n8n-nodes-langchain.toolHttpRequest',
+  version: 1.1,
+  config: {
+    name: 'Search The Web',
+    parameters: {
+      toolDescription:
+        'Search the public web for something happening in the world right now — news, weather, opening times, prices, travel. Returns a handful of results, each with a title, a URL and a short snippet. Use it only when the answer depends on current information the household has not told you. Never search for anything about this household; that is private.',
+      method: 'POST',
+      url: 'https://api.firecrawl.dev/v2/search',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpHeaderAuth',
+      sendBody: true,
+      specifyBody: 'json',
+      jsonBody: '{"query": "{query}", "limit": 5}',
+      placeholderDefinitions: {
+        values: [
+          {
+            name: 'query',
+            description:
+              'What to search for, phrased as you would type it into a search engine. Never include household names, addresses, health details or anything private.',
+            type: 'string',
+          },
+        ],
+      },
+      optimizeResponse: true,
+      responseType: 'json',
+      // Firecrawl v2 returns { success, data: { web: [...] } }.
+      dataField: 'data.web',
+    },
+    credentials: { httpHeaderAuth: newCredential('Firecrawl') },
+    position: [1180, 620],
+  },
 });
 
 const identityNote = sticky(
