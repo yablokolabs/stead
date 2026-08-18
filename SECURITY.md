@@ -487,22 +487,22 @@ selectively erased. Do not run the Stead gateway verbosely against real
 household data. This is Hermes-level behaviour; this project can pin the
 verbosity it starts with, not the level a future operator chooses.
 
-## Known residual risk: the web MVP borrows Polaris's Sarvam key
+## Resolved: the web MVP no longer shares Polaris's Sarvam key
 
 Transcription on the web path, and both transcription and synthesis on the n8n
-`Stead Telegram` workflow, authenticate with a Sarvam key taken from
+`Stead Telegram` workflow, originally authenticated with a Sarvam key taken from
 `~/.hermes/.env` — the **default** Hermes profile, which is Polaris.
 
-This contradicts **No shared model credential** at the top of this document. The
-concrete failure is not hypothetical: Sarvam rate-limits per key, so sustained
-traffic from Stead's web users can exhaust the quota Polaris depends on for its
-own speech, and revoking the key to stop one stops both.
+That contradicted **No shared model credential** at the top of this document,
+and the failure was not hypothetical: Sarvam rate-limits per key, so sustained
+traffic from Stead's web users could have exhausted the quota Polaris depends on
+for its own speech, and revoking the key to stop one would have stopped both.
 
-It is also a boundary crossing in the other direction. The key now lives in an
-n8n Cloud credential store, which is a third-party SaaS the Hermes host has no
-relationship with. Rotating it requires touching Polaris's env file.
+**A separate key has since been issued**, so the two no longer share one. The
+concern is recorded rather than deleted because the shape of it recurs: this
+repository's isolation argument is structural everywhere except where a
+credential is copied by hand, and that copying leaves no trace in either system.
 
-Closing it costs nothing: issue a second key from the same Sarvam account, owned
-by Stead, and repoint the `Sarvam` credential in n8n. It was raised twice during
-implementation and deliberately overridden to keep moving; it is recorded here
-so the decision is visible rather than tribal.
+The n8n credential store still holds a Sarvam key, and rotating it is a
+different operation from rotating the one in `~/.stead-demo/.env`. Whoever
+rotates one should know the other exists.
