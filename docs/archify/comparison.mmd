@@ -1,0 +1,32 @@
+```mermaid
+graph LR
+    subgraph "Custom Approach"
+        C1[Manual Analysis] --> C2[Mermaid Syntax]
+        C2 --> C3[Architecture.md]
+        C3 --> C4[docs/diagrams/]
+    end
+
+    subgraph "Archify Approach"
+        A1[Code Analysis] --> A2[Auto-Detection]
+        A2 --> A3[Generated Diagrams]
+        A3 --> A4[Auto-Updated]
+    end
+
+    subgraph "Stead Preview Architecture"
+        S1[Telegram Bot] --> S2[Stead Core]
+        S2 --> S3[Voice Processing]
+        S2 --> S4[MCP Server]
+        S2 --> S5[Identity Management]
+        S3 --> S6[Sarvam API]
+        S2 --> S7[SQLite Storage]
+    end
+
+    %% Styling
+    classDef custom fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef archify fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+    classDef stead fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+
+    class C1,C2,C3,C4 custom
+    class A1,A2,A3,A4 archify
+    class S1,S2,S3,S4,S5,S6,S7 stead
+```

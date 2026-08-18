@@ -1,5 +1,9 @@
 # Architecture
 
+![System Architecture](docs/diagrams/architecture.mmd)
+![Voice Processing Pipeline](docs/diagrams/voice-pipeline.mmd)
+![Data Flow](docs/diagrams/data-flow.mmd)
+
 ```
 Kerstin
   └─ Telegram — private "Stead Preview" bot, allow-listed to her ID
@@ -65,24 +69,6 @@ SLA. It is right for a private preview and wrong for a shipped product; a mobile
 Stead should move to a licensed voice (Azure Speech carries the same
 `en-GB-Ryan`). Sarvam's own TTS is unaffected by that concern and stays a
 one-line fallback.
-
-**The web MVP reaches the same conclusion by a different route.** It hears
-through Sarvam, as this profile does, but speaks in the browser:
-`speechSynthesis` with `lang: en-GB`, so the device picks a British voice and no
-audio crosses the network at all. It briefly used OpenAI `tts-1` with the voice
-`alloy`, which was neither British nor free; moving synthesis into the browser
-removed about three seconds a turn and the divergence at once.
-
-Sarvam turned out to be the better ear as well as the cheaper one. Given a sine
-tone containing no speech, Whisper returned the word "You" in 1,851 ms; Sarvam
-returned nothing in 1,182 ms. Inventing filler is worse than useless when the
-transcript is handed straight to an agent.
-
-The n8n `Stead Telegram` workflow is the exception: it has no browser, so it
-synthesises with Sarvam `bulbul:v3`, speaker `ratan` — male, but `en-IN`, since
-Sarvam still has no British voice. That workflow is a test harness rather than a
-user surface, so the divergence is accepted there. See
-`docs/CLOUDFLARE_MVP.md`.
 
 ## Why a Hermes profile
 

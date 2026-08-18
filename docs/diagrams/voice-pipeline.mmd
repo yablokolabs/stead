@@ -1,0 +1,29 @@
+
+```mermaid
+graph LR
+    %% Voice Input
+    VoiceNote[Voice Note] -->|Telegram| SarvamSTT[Sarvam STT]
+    TypedMessage[Typed Message] -->|Telegram| DirectInput[Direct Input]
+
+    %% Processing
+    SarvamSTT -->|Transcript| Transcript[transcript]
+    DirectInput -->|Text| DirectInput
+
+    %% Unified Processing
+    Transcript -->|Same turn| SteadProcessor[Stead Processor]
+    DirectInput -->|Same turn| SteadProcessor
+
+    %% Output Paths
+    SteadProcessor -->|Text response| TextOutput[Text Output]
+    SteadProcessor -->|Voice response| EdgeTTS[Edge TTS]
+    EdgeTTS -->|Voice output| VoiceOutput[Voice Note]
+
+    %% Styling
+    classDef input fill:#f9f,stroke:#333,stroke-width:2px
+    classDef process fill:#bbf,stroke:#333,stroke-width:2px
+    classDef output fill:#bfb,stroke:#333,stroke-width:2px
+
+    class VoiceNote,TypedMessage input
+    class SarvamSTT,DirectInput,Transcript,SteadProcessor process
+    class TextOutput,VoiceOutput output
+```

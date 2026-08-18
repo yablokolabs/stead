@@ -1,0 +1,52 @@
+```mermaid
+graph TD
+    %% External Actors
+    Kerstin[User] -->|Telegram Messages| TelegramBot[Telegram Bot]
+    TelegramBot -->|Voice/Text| SteadCore[Stead Core]
+
+    %% Infrastructure Layer
+    SteadCore -->|Search Queries| SearXNG[SearXNG Search]
+    SearXNG -->|Results| SteadCore
+    SteadCore -->|System Management| Systemd[Systemd Services]
+    SteadCore -->|Container Management| Docker[Docker]
+
+    %% Core Services
+    SteadCore -->|Voice Processing| VoiceModule[Stead Voice]
+    SteadCore -->|MCP Protocol| MCP[MCP Server]
+    SteadCore -->|Identity Management| Identity[Identity Service]
+
+    %% AI Services Integration
+    VoiceModule -->|Speech-to-Text| SarvamSTT[Sarvam STT]
+    VoiceModule -->|Text-to-Speech| SarvamTTS[Sarvam TTS]
+    SteadCore -->|Language Model| LLM[Language Model API]
+
+    %% Data Storage
+    SteadCore -->|Structured Data| SQLite[(SQLite Database)]
+    SteadCore -->|File Storage| FileSystem[File System]
+
+    %% Security Layer
+    SteadCore -->|Authentication| Auth[Auth Service]
+    SteadCore -->|Authorization| Authz[Authorization]
+    SteadCore -->|Encryption| Crypto[Encryption Layer]
+
+    %% External Interfaces
+    TelegramBot -->|Webhook| Webhook[Webhook Handler]
+    SteadCore -->|HTTP API| HTTP[HTTP API]
+
+    %% Styling
+    classDef external fill:#ff9,stroke:#333,stroke-width:2px
+    classDef infrastructure fill:#f9f,stroke:#333,stroke-width:2px
+    classDef core fill:#bbf,stroke:#333,stroke-width:2px
+    classDef ai fill:#9f9,stroke:#333,stroke-width:2px
+    classDef storage fill:#bfb,stroke:#333,stroke-width:2px
+    classDef security fill:#f99,stroke:#333,stroke-width:2px
+    classDef interface fill:#ff9,stroke:#333,stroke-width:2px
+
+    class Kerstin,TelegramBot external
+    class SearXNG,Systemd,Docker infrastructure
+    class SteadCore,VoiceModule,MCP,Identity core
+    class SarvamSTT,SarvamTTS,LLM ai
+    class SQLite,FileSystem storage
+    class Auth,Authz,Crypto security
+    class Webhook,HTTP interface
+```

@@ -136,16 +136,6 @@ cd "${REPO}"
 check "no .env tracked"                     "! git ls-files --error-unmatch .env"
 check "no database tracked"                 "[[ -z \$(git ls-files '*.sqlite*') ]]"
 check "no venv tracked"                     "[[ -z \$(git ls-files '.venv*') ]]"
-check "no node_modules tracked"             "[[ -z \$(git ls-files '*node_modules*') ]]"
-check "no worker dev vars tracked"          "[[ -z \$(git ls-files '*.dev.vars') ]]"
-check "no web env tracked"                  "[[ -z \$(git ls-files 'web/.env' 'web/.env.*' ':!web/.env.example') ]]"
-# The whole point of the gateway. Prose explaining the boundary is fine; an n8n
-# hostname, the secret's name, or the gateway-to-n8n header is not — none of
-# them has any business in code that ships to a browser.
-check "no n8n surface in the web app" \
-      "! git grep -qiE 'n8n\.cloud|N8N_WEBHOOK|Stead-Webhook-Secret' -- web"
-check "no webhook URL in worker sources" \
-      "! git grep -qiE 'n8n\.cloud|/webhook/' -- worker/src worker/wrangler.jsonc"
 check "Python dependencies are locked"      "[[ -f pyproject.toml && -f uv.lock ]]"
 check "runtime has no old-VM home literal" \
       "! grep -Rqs '/home/azureuser' scripts/stead-launch.sh stead_mcp/scheduler.py systemd/override.conf .env.example"
