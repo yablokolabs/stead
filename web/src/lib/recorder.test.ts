@@ -183,7 +183,9 @@ describe('speaking the reply', () => {
     voices = [voice('en-US'), voice('fr-FR')];
     speak('hello');
     expect(spoken[0]!.voice).toMatchObject({ lang: 'en-US' });
-    expect(spoken[0]!.lang).toBe('en-GB');
+    // The picked voice's own locale drives the utterance; WebKit ignores an
+    // assigned voice whose language disagrees with the utterance's.
+    expect(spoken[0]!.lang).toBe('en-US');
   });
 
   it('still speaks when the device offers no voices at all', () => {
@@ -191,6 +193,28 @@ describe('speaking the reply', () => {
     speak('hello');
     expect(spoken).toHaveLength(1);
     expect(spoken[0]!.voice).toBeNull();
+  });
+
+  /** Chrome returns an empty list until `voiceschanged` fires after load. */
+  it('waits for voices to load instead of falling back to the default', () => {
+    const listeners: { onVoicesChanged: (() => void) | null } = { onVoicesChanged: null };
+    vi.stubGlobal('speechSynthesis', {
+      cancel,
+      speak: (u: FakeUtterance) => void spoken.push(u),
+      getVoices: () => voices,
+      addEventListener: (_event: string, handler: () => void) => {
+        listeners.onVoicesChanged = handler;
+      },
+    });
+    voices = [];
+
+    speak('hello');
+    expect(spoken).toHaveLength(0); // nothing yet — waiting for the list
+
+    voices = [{ name: 'Serena', lang: 'en-GB', localService: true } as SpeechSynthesisVoice];
+    listeners.onVoicesChanged?.();
+    expect(spoken).toHaveLength(1);
+    expect(spoken[0]!.voice).toMatchObject({ lang: 'en-GB', name: 'Serena' });
   });
 
   it('cuts off whatever it was saying before starting again', () => {

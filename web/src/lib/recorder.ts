@@ -199,26 +199,59 @@ export function pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice 
   return usable.reduce((best, v) => (scoreVoice(v) > scoreVoice(best) ? v : best));
 }
 
+let pendingSpeak: string | null = null;
+
 /**
  * Speak a reply with the device's own synthesiser.
  *
  * This replaced server-side text-to-speech: it removed about three seconds
  * from every spoken turn and a base64 payload a third larger than the audio,
  * and it starts talking immediately rather than after a whole file arrives.
+ *
+ * Two browser facts shape the voice choice. Chrome loads the voice list
+ * asynchronously — the first `getVoices()` call can be empty — so an empty
+ * list waits for `voiceschanged` rather than falling back to the default
+ * (which is male on macOS). And once a voice is picked, its own locale is
+ * used for the utterance: WebKit can ignore an assigned voice whose language
+ * disagrees with the utterance's, silently undoing the pick.
+ *
+ * The console line exists so a voice complaint can be diagnosed from a
+ * browser session instead of from the code: it names the exact voice (or
+ * says there was none) when a reply is spoken.
  */
 export function speak(text: string): void {
   if (!canSpeak() || text.trim().length === 0) return;
 
-  window.speechSynthesis.cancel();
+  const voices = window.speechSynthesis.getVoices();
+  const voice = pickVoice(voices);
+  if (voice) {
+    console.info(`[stead-voice] browser voice=${voice.name} (${voice.lang})`);
+  } else if (voices.length === 0 && typeof window.speechSynthesis.addEventListener === 'function') {
+    pendingSpeak = text;
+    window.speechSynthesis.addEventListener(
+      'voiceschanged',
+      () => {
+        const pending = pendingSpeak;
+        pendingSpeak = null;
+        if (pending) speak(pending);
+      },
+      { once: true },
+    );
+    return;
+  } else {
+    console.info('[stead-voice] no usable voice; using the device default');
+  }
+
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-GB';
-  const voice = pickVoice(window.speechSynthesis.getVoices());
+  utterance.lang = voice?.lang ?? 'en-GB';
   if (voice) utterance.voice = voice;
+  window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utterance);
 }
 
 /** Stop mid-sentence — for when the user starts talking again. */
 export function stopSpeaking(): void {
+  pendingSpeak = null;
   if (canSpeak()) window.speechSynthesis.cancel();
 }
 
