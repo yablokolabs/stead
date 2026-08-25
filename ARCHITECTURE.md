@@ -68,7 +68,9 @@ one-line fallback.
 
 **The web MVP reaches the same conclusion by a different route.** It hears
 through Sarvam, as this profile does, but speaks in the browser:
-`speechSynthesis` with `lang: en-GB`, so the device picks a British voice and no
+`speechSynthesis` with `lang: en-GB`, so the device picks a female British
+voice when it has one — and, because macOS ships no female `en-GB` voice at
+all, a female voice of any English locale over a male British one — and no
 audio crosses the network at all. It briefly used OpenAI `tts-1` with the voice
 `alloy`, which was neither British nor free; moving synthesis into the browser
 removed about three seconds a turn and the divergence at once.

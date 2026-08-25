@@ -811,9 +811,10 @@ No execution at all means the request never got past Header Auth.
 - **No custom domain**, no DNS records touched.
 - **`http://localhost:5173` is in the production `ALLOWED_ORIGIN`** for beta
   convenience. Remove it before real households.
-- **The web voice is device-dependent.** The picker prefers a British female
-  voice, but `speechSynthesis` plays whatever the OS installed — a device with
-  only male voices still sounds male. Azure `en-GB-SoniaNeural` is the fix when
-  that matters.
+- **The web voice is device-dependent.** The picker prefers a female voice
+  (British when the device has one), but `speechSynthesis` plays whatever the
+  OS installed — a device with no female English voice at all (some macOS
+  builds) still sounds male. Azure `en-GB-SoniaNeural` is the fix when that
+  matters.
 - **Household audio and context reach OpenAI**, a vendor `SECURITY.md` does not
   list among its egress edges.

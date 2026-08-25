@@ -150,29 +150,31 @@ export function primePlayback(): void {
  */
 /**
  * `SpeechSynthesisVoice` has no gender field, so this is name matching and
- * therefore imperfect. These are the British female voices the major
- * platforms actually ship — Apple (Kate, Serena), Chrome (Google UK English
- * Female), Edge and Windows (Sonia, Libby, Maisie, Hazel) — and the male
- * names that must not outrank them.
+ * therefore imperfect. These are the female voices the major platforms
+ * actually ship — Apple (Kate, Serena, Samantha, Victoria, Moira, Tessa,
+ * Allison, Jill), Chrome (Google UK English Female, Google US English),
+ * Edge and Windows (Sonia, Libby, Maisie, Hazel, Aria, Jenny, Michelle,
+ * Zira) — and the male names that must not outrank them.
  *
  * `\bmale\b` deliberately does not match "Female" — no word boundary between
  * "Fe" and "male" — so the literal word in "Google UK English Female" lands
  * in the female list, not the male one.
  */
 const BRITISH_MALE = /\b(daniel|arthur|oliver|george|ryan|thomas|brian|alfie|elliot|male)\b/i;
-const FEMALE = /\b(female|kate|serena|sonia|libby|hazel|martha|maisie|amy|emma|fiona|susan|karen)\b/i;
+const FEMALE = /\b(female|kate|serena|sonia|libby|hazel|martha|maisie|amy|emma|fiona|susan|karen|samantha|victoria|moira|tessa|allison|jill|aria|jenny|michelle|zira|google us english)\b/i;
 
 /**
  * Scored in tiers, and the order of the tiers is the point.
  *
- * The household asked for a female voice, so `ARCHITECTURE.md` now names
- * `en-GB-SoniaNeural` — British and female. The argument it makes at length
- * is about the ACCENT: Stead serves a British household. So locale dominates
- * absolutely, and gender only decides between voices that are already
- * British: female first, then unrecognised names, then known male ones.
- * An earlier version scored these on one scale, which let an American male
- * outrank a British female — exactly the substitution this ordering argues
- * against.
+ * The household asked for a female voice, so gender dominates accent: macOS
+ * ships no female `en-GB` voice at all — its British voices are male (Daniel,
+ * Oliver) — so a female voice of any English locale must outrank a male
+ * British one, or a Mac never sounds female. Among female voices, British
+ * still wins (`en-GB-SoniaNeural` is the documented choice), and a known male
+ * name only beats voices that are neither recognisably female nor British.
+ * An earlier version scored locale above gender, which let a male British
+ * voice outrank every female voice on the platform the household actually
+ * uses — exactly the substitution this ordering argues against.
  */
 export function scoreVoice(voice: SpeechSynthesisVoice): number {
   let score: number;
@@ -180,7 +182,7 @@ export function scoreVoice(voice: SpeechSynthesisVoice): number {
   else if (voice.lang.startsWith('en')) score = 0;
   else return -1;
 
-  if (FEMALE.test(voice.name)) score += 100;
+  if (FEMALE.test(voice.name)) score += 1000;
   else if (BRITISH_MALE.test(voice.name)) score -= 100;
 
   if (/natural|neural/i.test(voice.name)) score += 30;
