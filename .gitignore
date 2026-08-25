@@ -3,6 +3,12 @@
 .env.*
 !.env.example
 
+# Worker secrets for `wrangler dev`. In production these are Worker secrets,
+# set with `wrangler secret put` and never written to disk here.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
 # Demo state — lives in STEAD_DEMO_HOME, never in the repo.
 *.sqlite
 *.sqlite-wal
@@ -25,6 +31,12 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# Node — web/ and worker/
+node_modules/
+dist/
+.wrangler/
+*.tsbuildinfo
 
 # Worktrees
 .worktrees/
