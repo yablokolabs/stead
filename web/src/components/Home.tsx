@@ -73,6 +73,9 @@ export function Home({ apiUrl }: { apiUrl: string }) {
       const reply = speakableText(result.reply);
       setTurn({ transcript: result.transcript, reply });
       if (!aloud) return true;
+      // Diagnostic: tells a voice complaint whether the audio came from the
+      // agent (server-side synthesis) or the browser's own voice.
+      console.info(`[stead-voice] source=${result.audio ? 'server-audio' : 'browser'}`);
       if (result.audio) playReply(result.audio);
       else speak(reply);
       return true;
