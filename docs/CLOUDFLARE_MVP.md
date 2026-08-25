@@ -431,8 +431,9 @@ Attach a tool, prove it harmless, and only then let the prompt advertise it.
 honours the *accent* the cheapest possible way: `speechSynthesis` obeys
 `lang: en-GB`, so the device picks a British voice, no audio crosses the
 network, and nothing is billed. Voices are ranked — British over other English,
-`Natural`/`Neural` names above the rest, female over male, since the documented
-choice is `en-GB-Sonia`.
+female over male (macOS ships no female `en-GB` voice, so gender must dominate
+accent), British among females, `Natural`/`Neural` names above the rest — since
+the documented choice is `en-GB-Sonia`.
 
 **It does not honour the quality, and this was tested.** The result was judged
 robotic in practice and accepted as good enough for the demo rather than

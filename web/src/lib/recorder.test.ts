@@ -66,11 +66,13 @@ describe('pickVoice', () => {
   });
 
   /**
-   * The household asked for a female voice, so the picker prefers British
-   * female — ARCHITECTURE.md now names en-GB-SoniaNeural. There is no gender
-   * field on a voice, so this is name matching.
+   * The household asked for a female voice, so the picker prefers female
+   * first and British second — ARCHITECTURE.md names en-GB-SoniaNeural, but
+   * macOS ships no female en-GB voice at all, so a female voice of any
+   * English locale must beat a male British one. There is no gender field on
+   * a voice, so this is name matching.
    */
-  describe('British and female, as the household asked for', () => {
+  describe('female first, British among females, as the household asked for', () => {
     it.each([
       ['Apple', ['Kate', 'Daniel'], 'Kate'],
       ['Chrome', ['Google UK English Female', 'Google UK English Male'], 'Google UK English Female'],
@@ -107,6 +109,23 @@ describe('pickVoice', () => {
     it('still prefers British female over American male', () => {
       const pick = pickVoice([v('Serena', 'en-GB'), v('Daniel', 'en-US')]);
       expect(pick?.name).toBe('Serena');
+    });
+
+    /** macOS ships no female en-GB voice — its British voices are male. */
+    it('prefers an American female over the male British voice macOS ships', () => {
+      const pick = pickVoice([v('Daniel', 'en-GB'), v('Samantha', 'en-US')]);
+      expect(pick?.name).toBe('Samantha');
+    });
+
+    it('prefers a female of any English locale over a male British voice', () => {
+      const pick = pickVoice([v('Oliver', 'en-GB'), v('Victoria', 'en-US')]);
+      expect(pick?.name).toBe('Victoria');
+    });
+
+    /** Better a male British voice than the device's default. */
+    it('falls back to a male British voice when nothing female exists', () => {
+      const pick = pickVoice([v('Daniel', 'en-GB'), v('Alex', 'en-US')]);
+      expect(pick?.name).toBe('Daniel');
     });
 
     it('takes a female voice rather than none when that is all there is', () => {
