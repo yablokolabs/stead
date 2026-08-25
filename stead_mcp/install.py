@@ -16,10 +16,11 @@ DEFAULT_MODEL = "gemini-3.1-flash-lite-preview"
 _SAFE_VALUE = re.compile(r"^[A-Za-z0-9._:/+-]+$")
 
 # Speech. The plugin package in this repo, the name Hermes routes `stt.provider`
-# by, and the voice Stead answers in.
+# by, and the voice Stead answers in. Female British voice (Sonia); the male
+# alternatives are en-GB-RyanNeural and en-GB-ThomasNeural.
 VOICE_PLUGIN = "stead_voice"
 STT_PROVIDER = "sarvam"
-BRITISH_MALE_VOICE = "en-GB-RyanNeural"
+BRITISH_VOICE = "en-GB-SoniaNeural"
 
 # Page reading. Kept separate from `web.backend` so the search half stays on the
 # local proxy — see the Web search section of SECURITY.md.
@@ -104,7 +105,7 @@ def render_profile_config(
         # Bulbul model speaks English only as en-IN. Edge does, so Stead hears
         # through Sarvam and speaks through Edge. Both sit behind the same
         # provider interface, so this line is the whole switch.
-        "tts": {"provider": "edge", "edge": {"voice": BRITISH_MALE_VOICE}},
+        "tts": {"provider": "edge", "edge": {"voice": BRITISH_VOICE}},
         # Without this a voice note comes back as text: the per-chat /voice
         # mode is keyed on the chat you talk from, not on the reminder
         # destination, so relying on it silently misses household members.
