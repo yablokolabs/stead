@@ -10,8 +10,10 @@ Kerstin
                  ├─ memory ................. a few communication preferences
                  ├─ cron ................... approved reminders, check-ins
                  ├─ MCP: stead (stdio)
-                 │    └─ stead_mcp.server → stead_mcp.store
-                 │         └─ ~/.stead-demo/stead.sqlite   (mode 600)
+                 │    └─ stead_mcp.server
+                 │         ├─ stead_mcp.store … ~/.stead-demo/stead.sqlite
+                 │         │                        (mode 600)
+                 │         └─ stead_mcp.jnaapakam … local jnaapakam server
                  ├─ plugin: stead_voice
                  │    ├─ STT  sarvam  → MCP: sarvam (stdio)               ──→ out
                  │    └─ TTS  sarvam  (registered, not selected)
@@ -97,7 +99,7 @@ Per-profile services follow the `hermes-gateway-<profile>.service` convention,
 so the Stead unit and Polaris's `hermes-gateway.service` are separate units with
 separate PIDs, logs and lifecycles.
 
-## Two memory layers
+## Three memory layers
 
 **Hermes memory** holds a small number of high-value communication preferences —
 how Kerstin likes to be spoken to. It is bounded on purpose.
@@ -106,8 +108,18 @@ how Kerstin likes to be spoken to. It is bounded on purpose.
 goals, tasks, proposals, reminders, outcomes, audit events. This is what gets
 retrieved at the start of every turn and every scheduled run.
 
+**jnaapakam** is the free-form long-term layer. It is a separate local server
+(SQLite + FTS5 full-text index) that keeps an unbounded, content-searchable
+store: each memory is LLM-extracted into a summary, entities, topics and an
+importance score, and `recall` ranks by relevance, recency and importance —
+everything stays retrievable forever, nothing is pruned. The `remember` and
+`recall` tools reach it through `stead_mcp/jnaapakam.py`; the household is bound
+to a jnaapakam namespace at construction, exactly like `household_id` in the
+store. It is opt-in: unset `JNAAPAKAM_URL` and both tools fail closed.
+
 Conversations are not archived wholesale. Only confirmed facts and operational
-state are written, each with a timestamp and a provenance string.
+state are written, each with a timestamp and a provenance string; the free-form
+layer stores what Kerstin says should survive, not a transcript.
 
 Every fact also records **where it came from**. `source` is `'stated'` or
 `'web'`, and unlike the free-text `provenance` string it is set by the code

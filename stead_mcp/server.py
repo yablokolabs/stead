@@ -18,6 +18,7 @@ from typing import Any, Dict
 
 from mcp.server.fastmcp import FastMCP
 
+from stead_mcp.jnaapakam import JnaapakamMemory, MemoryUnavailable
 from stead_mcp.scheduler import (
     SchedulerMisconfigured,
     SchedulingRefused,
@@ -53,7 +54,8 @@ def _fail(exc: Exception) -> Dict[str, Any]:
 
 
 def build_server(store: SteadStore | None = None,
-                 scheduler: SteadScheduler | None = None) -> FastMCP:
+                 scheduler: SteadScheduler | None = None,
+                 memory: JnaapakamMemory | None = None) -> FastMCP:
     store = store or build_store()
     mcp = FastMCP("stead")
 
@@ -63,6 +65,17 @@ def build_server(store: SteadStore | None = None,
         if scheduler is not None:
             return scheduler
         return SteadScheduler.from_environment(store)
+
+    def get_memory() -> JnaapakamMemory:
+        """Resolve the memory server lazily so a missing URL fails at the tool.
+
+        The namespace is the household id from the store, never model input:
+        a compromised model can read and write this household's memories and
+        no other's.
+        """
+        if memory is not None:
+            return memory
+        return JnaapakamMemory.from_environment(store.household_id)
 
     def _audit(tool: str, ok: bool) -> None:
         log.info("tool=%s ok=%s", tool, ok)
@@ -296,6 +309,49 @@ def build_server(store: SteadStore | None = None,
         store.mark_delivered(reminder_id)
         _audit("mark_delivered", True)
         return {"ok": True, "reminder_id": reminder_id}
+
+    # -- long-term memory (jnaapakam) -----------------------------------------
+    # Structured household state lives in the SQLite store above. jnaapakam is
+    # the free-form layer: unbounded, content-searchable, LLM-extracted — for
+    # the durable knowledge that does not fit a fact row and must never be
+    # forgotten. The namespace is bound at construction to the household id.
+
+    @mcp.tool()
+    def remember(text: str, source: str = "conversation") -> Dict[str, Any]:
+        """Persist one durable memory to the growing household store.
+
+        For knowledge that should never be forgotten: preferences, family
+        details, history, decisions. Not for conversational filler or
+        anything you concluded yourself rather than were told.
+        """
+        if not text.strip():
+            return _fail(ValueError("text must be non-empty"))
+        try:
+            result = get_memory().store(text=text, source=source or "conversation")
+        except MemoryUnavailable as exc:
+            _audit("remember", False)
+            return _fail(exc)
+        _audit("remember", True)
+        return {"ok": True, **result}
+
+    @mcp.tool()
+    def recall(query: str, limit: int = 5) -> Dict[str, Any]:
+        """Return the stored memories most relevant to `query`.
+
+        Search is by meaning as well as words (full-text + entity/topic
+        match, ranked by recency and importance). Useful when a detail is
+        not in the household context — it was stored once and should be
+        retrievable forever.
+        """
+        if not query.strip():
+            return _fail(ValueError("query must be non-empty"))
+        try:
+            memories = get_memory().recall(query=query, limit=limit)
+        except MemoryUnavailable as exc:
+            _audit("recall", False)
+            return _fail(exc)
+        _audit("recall", True)
+        return {"ok": True, "memories": memories, "query": query}
 
     # -- outcomes and audit ---------------------------------------------------
 

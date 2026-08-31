@@ -19,7 +19,7 @@ line is either observed or not done.
       `--profile stead-kerstin-demo`, `Restart=always`, no secrets in the unit
 - [x] Forbidden toolsets disabled on `cli` and `telegram`, including `cronjob` —
       raw scheduling is replaced by `schedule_approved_reminder(ref)`
-- [x] 22 Stead MCP tools registered in the Stead profile only
+- [x] 24 Stead MCP tools registered in the Stead profile only
 - [x] Ambient provider credentials scrubbed by the launcher; `copilot` and
       `qwen-oauth` suppressed in the Stead profile
 - [ ] `openai-codex` remains resolvable from outside the profile — mitigated by

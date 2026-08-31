@@ -16,16 +16,27 @@ from __future__ import annotations
 import logging
 from typing import Any, Mapping
 
-from .stt import SarvamTranscriptionProvider
-from .tts import SarvamTTSProvider
+logger = logging.getLogger(__name__)
+
+try:
+    from .stt import SarvamTranscriptionProvider
+    from .tts import SarvamTTSProvider
+    _PROVIDERS_AVAILABLE = True
+except ModuleNotFoundError:  # the agent.* ABCs only exist inside a Hermes install
+    logger.debug("stead_voice: Hermes provider ABCs not importable; providers disabled")
+    SarvamTranscriptionProvider = None  # type: ignore[assignment]
+    SarvamTTSProvider = None            # type: ignore[assignment]
+    _PROVIDERS_AVAILABLE = False
 
 __all__ = ["SarvamTranscriptionProvider", "SarvamTTSProvider", "register"]
-
-logger = logging.getLogger(__name__)
 
 
 def register(ctx: Any) -> None:
     """Register Sarvam under the name ``sarvam`` for both `stt` and `tts`."""
+    if not _PROVIDERS_AVAILABLE:
+        raise RuntimeError(
+            "stead_voice: Hermes provider ABCs are not importable here, cannot register"
+        )
     stt_config = _section("stt")
     tts_config = _section("tts")
 

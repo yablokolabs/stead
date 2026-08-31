@@ -18,6 +18,7 @@ EXPECTED_TOOLS = {
     "schedule_approved_reminder",
     "list_approved_reminders", "due_reminders", "mark_delivered",
     "record_outcome", "add_audit_event",
+    "remember", "recall",
 }
 
 

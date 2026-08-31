@@ -22,6 +22,7 @@ from typing import Any, Sequence
 from agent.tts_provider import TTSProvider
 
 from .mcp_client import DEFAULT_TIMEOUT, SarvamMCPClient, SarvamMCPError
+from .plain_prose import sanitize_for_speech
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +117,16 @@ class SarvamTTSProvider(TTSProvider):
             timeout=self._timeout,
         )
         try:
+            # Read the reply as plain prose, not as the markdown Telegram shows:
+            # "**bold**" must not come out as "asterisk asterisk".
+            spoken = sanitize_for_speech(text)
             parts = [
                 client.call_tool(TOOL, {
                     "text": chunk,
                     "target_language_code": self._language,
                     "speaker": voice or self._speaker,
                 }).get("file_path")
-                for chunk in _chunk(text)
+                for chunk in _chunk(spoken)
             ]
             if not parts or not all(parts):
                 raise SarvamMCPError("Sarvam returned no audio")

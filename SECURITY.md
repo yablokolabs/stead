@@ -89,7 +89,7 @@ household or credentials. See `MIGRATION.md`.
 ## Tool restriction
 
 Enabled for `stead-kerstin-demo` on both `cli` and `telegram`: `clarify`,
-`memory`, `session_search`, `web`, plus the 22 Stead MCP tools.
+`memory`, `session_search`, `web`, plus the 24 Stead MCP tools.
 
 `cronjob` is **disabled**. Hermes' built-in scheduler tool lets the caller choose
 both the delivery target and the job prompt, which routes around the proposal
