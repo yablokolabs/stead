@@ -1,4 +1,4 @@
-# Stead Preview
+# Stead
 
 A private household chief-of-staff agent for one invited tester, running as an
 isolated Hermes profile on this VM.
